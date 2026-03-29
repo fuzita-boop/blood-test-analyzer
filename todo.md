@@ -40,3 +40,10 @@
 - [x] サイドバーから患者管理ナビを除去
 - [x] App.tsxから患者関連ルートを削除
 - [x] テスト更新・全通過確認（11/11）
+
+## Phase 6: PWAアイコン実装
+- [x] PWAアイコン画像をAIで生成（192x192, 512x512）
+- [x] CDNにアップロード
+- [x] manifest.jsonを作成
+- [x] index.htmlにメタタグ・manifest linkを追加
+- [x] apple-touch-icon対応
