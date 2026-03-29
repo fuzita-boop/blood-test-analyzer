@@ -195,10 +195,69 @@ describe("カテゴリ分類", () => {
     const results = screenAbnormalValues([{ item: "UNKNOWN_ITEM", value: 999, unit: "mg/dL" }]);
     expect(results).toHaveLength(0);
   });
+// ── OCR表記バリエーション対応テスト ──────────────────────────────────────────────────
+describe("OCR表記バリエーション - 項目名正規化", () => {
+  it("HBA1C → HbA1cとして高値検出", () => {
+    const results = screenAbnormalValues([{ item: "HBA1C", value: 8.5, unit: "%" }]);
+    expect(results[0]?.status).toBe("high");
+    expect(results[0]?.category).toBe("糖代謝");
+  });
+
+  it("HBAIC → HbA1cとして高値検出（OCRの1→I誤認対応）", () => {
+    const results = screenAbnormalValues([{ item: "HBAIC", value: 8.5, unit: "%" }]);
+    expect(results[0]?.status).toBe("high");
+  });
+
+  it("ALT(GPT) → ALTとして高値検出", () => {
+    const results = screenAbnormalValues([{ item: "ALT(GPT)", value: 60, unit: "U/L" }]);
+    expect(results[0]?.status).toBe("high");
+    expect(results[0]?.category).toBe("肝機能");
+  });
+
+  it("ALT (GPT) → ALTとして高値検出（スペースあり）", () => {
+    const results = screenAbnormalValues([{ item: "ALT (GPT)", value: 60, unit: "U/L" }]);
+    expect(results[0]?.status).toBe("high");
+  });
+
+  it("AST(GOT) → ASTとして高値検出", () => {
+    const results = screenAbnormalValues([{ item: "AST(GOT)", value: 50, unit: "U/L" }]);
+    expect(results[0]?.status).toBe("high");
+  });
+
+  it("GGT → γ-GTPとして高値検出", () => {
+    const results = screenAbnormalValues([{ item: "GGT", value: 80, unit: "U/L" }]);
+    expect(results[0]?.status).toBe("high");
+    expect(results[0]?.category).toBe("肝機能");
+  });
+
+  it("LDLコレステロール → LDLとして高値検出", () => {
+    const results = screenAbnormalValues([{ item: "LDLコレステロール", value: 160, unit: "mg/dL" }]);
+    expect(results[0]?.status).toBe("high");
+    expect(results[0]?.category).toBe("脂質代謝");
+  });
+
+  it("LDL-コレステロール → LDLとして高値検出", () => {
+    const results = screenAbnormalValues([{ item: "LDL-コレステロール", value: 160, unit: "mg/dL" }]);
+    expect(results[0]?.status).toBe("high");
+  });
+
+  it("γ-GTP 正常値（30 U/L）は normal", () => {
+    const results = screenAbnormalValues([{ item: "γ-GTP", value: 30, unit: "U/L" }]);
+    expect(results[0]?.status).toBe("normal");
+  });
+
+  it("HbA1c 正常値（5.5%）は normal", () => {
+    const results = screenAbnormalValues([{ item: "HbA1c", value: 5.5, unit: "%" }]);
+    expect(results[0]?.status).toBe("normal");
+  });
+
+  it("LDL 正常値（100 mg/dL）は normal", () => {
+    const results = screenAbnormalValues([{ item: "LDL", value: 100, unit: "mg/dL" }]);
+    expect(results[0]?.status).toBe("normal");
+  });
 });
 
-// ── getAbnormalValues フィルタリング ─────────────────────────────────────────
-describe("getAbnormalValues", () => {
+// ── getAbnormalValues フィルタリング ─────────────────────────────────────────────────────be("getAbnormalValues", () => {
   it("正常値のみの場合は空配列を返す", () => {
     const results = screenAbnormalValues([
       { item: "WBC", value: 5800, unit: "/μL" },

@@ -132,6 +132,8 @@ export const REFERENCE_VALUES: Record<string, ReferenceRange> = {
   "γ-GT": { min: 0, max: 50, unit: "U/L", internalUnit: "U/L", fullName: "γ-GTP", category: "肝機能" },
   "γGTP": { min: 0, max: 50, unit: "U/L", internalUnit: "U/L", fullName: "γ-GTP", category: "肝機能" },
   "γ-GTP": { min: 0, max: 50, unit: "U/L", internalUnit: "U/L", fullName: "γ-GTP", category: "肝機能" },
+  "GGT": { min: 0, max: 50, unit: "U/L", internalUnit: "U/L", fullName: "γ-GTP", category: "肝機能" },
+  "γGT": { min: 0, max: 50, unit: "U/L", internalUnit: "U/L", fullName: "γ-GTP", category: "肝機能" },
   ALP: { min: 38, max: 113, unit: "U/L", internalUnit: "U/L", fullName: "アルカリホスファターゼ", category: "肝機能" },
   LDH: { min: 124, max: 222, unit: "U/L", internalUnit: "U/L", fullName: "乳酸脱水素酵素", category: "肝機能" },
   T_BIL: { min: 0.2, max: 1.2, unit: "mg/dL", internalUnit: "mg/dL", fullName: "総ビリルビン", category: "肝機能", criticalHigh: 15.0 },
@@ -164,6 +166,8 @@ export const REFERENCE_VALUES: Record<string, ReferenceRange> = {
   "総コレステロール": { min: 142, max: 248, unit: "mg/dL", internalUnit: "mg/dL", fullName: "総コレステロール", category: "脂質代謝" },
   LDL: { min: 65, max: 139, unit: "mg/dL", internalUnit: "mg/dL", fullName: "LDLコレステロール", category: "脂質代謝" },
   "LDL-C": { min: 65, max: 139, unit: "mg/dL", internalUnit: "mg/dL", fullName: "LDLコレステロール", category: "脂質代謝" },
+  "LDLコレステロール": { min: 65, max: 139, unit: "mg/dL", internalUnit: "mg/dL", fullName: "LDLコレステロール", category: "脂質代謝" },
+  "LDL-コレステロール": { min: 65, max: 139, unit: "mg/dL", internalUnit: "mg/dL", fullName: "LDLコレステロール", category: "脂質代謝" },
   HDL: { min: 40, max: 9999, unit: "mg/dL", internalUnit: "mg/dL", fullName: "HDLコレステロール", category: "脂質代謝" },
   "HDL-C": { min: 40, max: 9999, unit: "mg/dL", internalUnit: "mg/dL", fullName: "HDLコレステロール", category: "脂質代謝" },
   TG: { min: 30, max: 149, unit: "mg/dL", internalUnit: "mg/dL", fullName: "中性脂肪（トリグリセリド）", category: "脂質代謝" },
@@ -249,25 +253,115 @@ const UNIT_CONVERSION: Record<string, Record<string, number>> = {
 };
 
 /**
- * 検査項目名の正規化（別名・英語名→標準キー）
+ * 検査項目名の正規化（別名・英語名・OCR認識バリエーション→標準キー）
+ *
+ * 注意: OCRは以下のような表記を返すことがあるため、大文字小文字・括弧・スペース・ハイフンを除去してマッチング
+ *   例: "ALT(GPT)", "ALT (GPT)", "AST（GOT）", "HbA1c", "HBA1C", "HBAIC", "γ-GTP", "GGT"
  */
 function normalizeItemName(name: string): string {
-  const upper = name.trim().toUpperCase();
+  // 括弧内の別名を除去してコア名だけ抽出（例: "ALT(GPT)" → "ALT"）
+  const stripped = name
+    .trim()
+    .replace(/[（(].*?[）)]/g, "")  // 括弧内を除去
+    .replace(/[\s\-・·]/g, "")      // スペース・ハイフン・中点を除去
+    .trim();
+
+  const upper = stripped.toUpperCase();
+
+  // 大文字小文字無視のエイリアステーブル
   const aliases: Record<string, string> = {
-    "GOT": "AST",
-    "GPT": "ALT",
-    "HB": "Hb",
-    "HT": "HCT",
-    "CR": "CRE",
-    "CREATININE": "CRE",
-    "GLUCOSE": "GLU",
-    "TRIGLYCERIDE": "TG",
-    "CHOLESTEROL": "TC",
+    // 血算
     "WBC": "WBC",
     "RBC": "RBC",
     "PLT": "PLT",
+    "HGB": "HGB",
+    "HB": "Hb",
+    "HCT": "HCT",
+    "HT": "HCT",
+    "MCV": "MCV",
+    "MCH": "MCH",
+    "MCHC": "MCHC",
+    // 肝機能
+    "AST": "AST",
+    "GOT": "AST",
+    "ALT": "ALT",
+    "GPT": "ALT",
+    "YGTP": "γ-GTP",
+    "GGTP": "γ-GTP",
+    "GGT": "γ-GTP",
+    "YGGT": "γ-GTP",
+    "ALP": "ALP",
+    "LDH": "LDH",
+    "TBIL": "T_BIL",
+    "TBILI": "T_BIL",
+    "DBIL": "D_BIL",
+    "TP": "TP",
+    "ALB": "ALB",
+    // 腐機能
+    "BUN": "BUN",
+    "CRE": "CRE",
+    "CR": "CRE",
+    "CREATININE": "CRE",
+    "EGFR": "eGFR",
+    "UA": "UA",
+    // 糖代謝
+    "GLU": "GLU",
+    "BS": "BS",
+    "FBS": "FBS",
+    "GLUCOSE": "GLU",
+    "HBAIC": "HbA1c",   // OCR誤認対応（数字の1をIと誤認）
+    "HBA1C": "HbA1c",
+    "HBAC": "HbA1c",
+    "A1C": "HbA1c",
+    "HEMOGLOBINA1C": "HbA1c",
+    // 脆質代謝
+    "TC": "TC",
+    "CHOLESTEROL": "TC",
+    "LDLC": "LDL",
+    "LDL": "LDL",
+    "LDLCHOLESTEROL": "LDL",
+    "HDLC": "HDL",
+    "HDL": "HDL",
+    "HDLCHOLESTEROL": "HDL",
+    "TG": "TG",
+    "TRIGLYCERIDE": "TG",
+    "TRIGLYCERIDES": "TG",
+    // 電解質
+    "NA": "Na",
+    "K": "K",
+    "CL": "Cl",
+    "CA": "Ca",
+    "MG": "Mg",
+    "P": "P",
+    // 炎症
+    "CRP": "CRP",
+    "ESR": "ESR",
+    "PCT": "PCT",
+    // 凝固
+    "PT": "PT",
+    "PTINR": "PT-INR",
+    "INR": "INR",
+    "APTT": "APTT",
+    "FIB": "FIB",
+    "DDIMER": "D-dimer",
+    // 甲状腺
+    "TSH": "TSH",
+    "FT4": "FT4",
+    "FT3": "FT3",
+    // 心筋マーカー
+    "CK": "CK",
+    "CKMB": "CK-MB",
+    "BNP": "BNP",
+    "NTPROBNP": "NT-proBNP",
+    "TROPONIN": "Troponin",
+    "TROPONI": "Troponin",
   };
-  return aliases[upper] || name.trim();
+
+  // エイリアステーブルでマッチした場合はそれを返す
+  if (aliases[upper]) return aliases[upper];
+
+  // エイリアステーブルにない場合は元の名前をそのまま返す（日本語名は基準値テーブルに直接登録済み）
+  return name.trim();
 }
 
 /**
