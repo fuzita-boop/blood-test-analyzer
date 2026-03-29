@@ -6,7 +6,6 @@ import {
   Activity,
   Upload,
   History,
-  Users,
   LogOut,
   Menu,
   X,
@@ -20,7 +19,6 @@ const navItems = [
   { href: "/", label: "ダッシュボード", icon: Activity },
   { href: "/upload", label: "新規解析", icon: Upload },
   { href: "/history", label: "解析履歴", icon: History },
-  { href: "/patients", label: "患者管理", icon: Users },
 ];
 
 interface AppLayoutProps {

@@ -2,13 +2,6 @@ import AppLayout from "@/components/AppLayout";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useCallback, useRef, useState } from "react";
@@ -16,12 +9,12 @@ import { useLocation } from "wouter";
 import { toast } from "sonner";
 import {
   Upload as UploadIcon,
-  ImageIcon,
   X,
   Loader2,
   AlertTriangle,
   CheckCircle,
   FlaskConical,
+  ShieldCheck,
 } from "lucide-react";
 
 export default function Upload() {
@@ -29,13 +22,11 @@ export default function Upload() {
   const [dragOver, setDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [patientId, setPatientId] = useState<string>("");
   const [testDate, setTestDate] = useState<string>("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisStep, setAnalysisStep] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { data: patients } = trpc.patient.list.useQuery();
   const analyzeMutation = trpc.bloodTest.uploadAndAnalyze.useMutation({
     onSuccess: (data) => {
       toast.success("解析が完了しました");
@@ -77,9 +68,8 @@ export default function Upload() {
     if (!selectedFile || !preview) return;
 
     setIsAnalyzing(true);
-    setAnalysisStep("画像をアップロード中...");
+    setAnalysisStep("画像を一時アップロード中...");
 
-    // base64に変換（data:image/...;base64, の部分を除去）
     const base64 = preview.split(",")[1];
     if (!base64) {
       toast.error("画像の読み込みに失敗しました");
@@ -90,11 +80,11 @@ export default function Upload() {
     setTimeout(() => setAnalysisStep("AIが検査値を解析中..."), 1500);
     setTimeout(() => setAnalysisStep("異常値をスクリーニング中..."), 4000);
     setTimeout(() => setAnalysisStep("アセスメントレポートを生成中..."), 7000);
+    setTimeout(() => setAnalysisStep("画像を削除中（プライバシー保護）..."), 10000);
 
     analyzeMutation.mutate({
       imageBase64: base64,
       mimeType: selectedFile.type,
-      patientId: patientId && patientId !== "none" ? parseInt(patientId) : undefined,
       testDate: testDate || undefined,
     });
   };
@@ -106,6 +96,18 @@ export default function Upload() {
         <div>
           <h1 className="text-2xl font-semibold text-foreground tracking-tight">新規解析</h1>
           <p className="text-muted-foreground text-sm mt-1">採血データの画像をアップロードしてAI解析を開始します</p>
+        </div>
+
+        {/* Privacy Notice */}
+        <div className="flex items-start gap-3 p-4 rounded-lg bg-emerald-50 border border-emerald-200">
+          <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-xs font-medium text-emerald-700">プライバシー保護について</p>
+            <p className="text-xs text-emerald-600 mt-0.5 leading-relaxed">
+              アップロードされた画像はAI解析のみに使用し、<strong>読み取り完了後に自動削除</strong>されます。
+              氏名・生年月日・ID番号などの個人情報は抽出・保存しません。
+            </p>
+          </div>
         </div>
 
         {/* Upload Area */}
@@ -184,47 +186,26 @@ export default function Upload() {
 
         {/* Options */}
         <Card className="border-border shadow-none">
-          <CardContent className="p-6 space-y-5">
-            <h2 className="text-sm font-semibold text-foreground">オプション設定</h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div className="space-y-2">
-                <Label className="text-xs font-medium text-muted-foreground">患者（任意）</Label>
-                <Select value={patientId} onValueChange={setPatientId}>
-                  <SelectTrigger className="h-9 text-sm">
-                    <SelectValue placeholder="患者を選択（任意）" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">選択しない</SelectItem>
-                    {patients?.map((p) => (
-                      <SelectItem key={p.id} value={String(p.id)}>
-                        {p.name}
-                        {p.patientCode ? ` (${p.patientCode})` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs font-medium text-muted-foreground">採血日（任意）</Label>
-                <Input
-                  type="date"
-                  value={testDate}
-                  onChange={(e) => setTestDate(e.target.value)}
-                  className="h-9 text-sm"
-                />
-              </div>
+          <CardContent className="p-6">
+            <h2 className="text-sm font-semibold text-foreground mb-4">オプション設定</h2>
+            <div className="space-y-2">
+              <Label className="text-xs font-medium text-muted-foreground">採血日（任意）</Label>
+              <Input
+                type="date"
+                value={testDate}
+                onChange={(e) => setTestDate(e.target.value)}
+                className="h-9 text-sm max-w-xs"
+              />
             </div>
           </CardContent>
         </Card>
 
-        {/* Notice */}
+        {/* Disclaimer */}
         <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-50 border border-amber-200">
           <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
           <p className="text-xs text-amber-700 leading-relaxed">
-            アップロードされた画像から個人情報（氏名・生年月日・ID番号）は読み取りません。
-            検査項目と数値のみを抽出します。
+            本システムはAIによる参考情報の提供を目的としており、医学的診断を示すものではありません。
+            異常値については必ず主治医の指示を仰いでください。
           </p>
         </div>
 
@@ -262,10 +243,11 @@ export default function Upload() {
               </div>
               <div className="mt-4 space-y-2">
                 {[
-                  "画像をS3にアップロード",
-                  "LLMで検査値を抽出",
+                  "画像をS3に一時アップロード",
+                  "LLMで検査値を抽出（個人情報は除外）",
                   "異常値をスクリーニング",
                   "アセスメントレポートを生成",
+                  "S3から画像を自動削除",
                 ].map((step, i) => (
                   <div key={i} className="flex items-center gap-2">
                     <div className="w-1.5 h-1.5 rounded-full bg-primary/40" />

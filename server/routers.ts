@@ -4,13 +4,8 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
-import { storagePut } from "./storage";
+import { storagePut, storageDelete } from "./storage";
 import {
-  createPatient,
-  getPatientsByUserId,
-  getPatientById,
-  updatePatient,
-  deletePatient,
   createBloodTestRecord,
   getBloodTestRecordsByUserId,
   getBloodTestRecordById,
@@ -23,87 +18,35 @@ import {
 import { screenAbnormalValues, getAbnormalValues } from "./referenceValues";
 import { nanoid } from "nanoid";
 
-// ── 患者ルーター ───────────────────────────────────────────────────────────
-
-const patientRouter = router({
-  list: protectedProcedure.query(({ ctx }) =>
-    getPatientsByUserId(ctx.user.id)
-  ),
-
-  get: protectedProcedure
-    .input(z.object({ id: z.number() }))
-    .query(({ ctx, input }) => getPatientById(input.id, ctx.user.id)),
-
-  create: protectedProcedure
-    .input(
-      z.object({
-        name: z.string().min(1).max(100),
-        patientCode: z.string().max(50).optional(),
-        birthYear: z.number().int().min(1900).max(2100).optional(),
-        gender: z.enum(["male", "female", "other"]).optional(),
-        notes: z.string().optional(),
-      })
-    )
-    .mutation(({ ctx, input }) =>
-      createPatient({ ...input, userId: ctx.user.id })
-    ),
-
-  update: protectedProcedure
-    .input(
-      z.object({
-        id: z.number(),
-        name: z.string().min(1).max(100).optional(),
-        patientCode: z.string().max(50).optional(),
-        birthYear: z.number().int().min(1900).max(2100).optional(),
-        gender: z.enum(["male", "female", "other"]).optional(),
-        notes: z.string().optional(),
-      })
-    )
-    .mutation(({ ctx, input }) => {
-      const { id, ...data } = input;
-      return updatePatient(id, ctx.user.id, data);
-    }),
-
-  delete: protectedProcedure
-    .input(z.object({ id: z.number() }))
-    .mutation(({ ctx, input }) => deletePatient(input.id, ctx.user.id)),
-});
-
 // ── 採血記録ルーター ───────────────────────────────────────────────────────
 
 const bloodTestRouter = router({
   list: protectedProcedure
     .input(z.object({ patientId: z.number().optional() }))
-    .query(({ ctx, input }) =>
-      getBloodTestRecordsByUserId(ctx.user.id, input.patientId)
-    ),
+    .query(({ ctx }) => getBloodTestRecordsByUserId(ctx.user.id)),
 
   get: protectedProcedure
     .input(z.object({ id: z.number() }))
     .query(({ ctx, input }) => getBloodTestRecordById(input.id, ctx.user.id)),
 
-  // S3へ画像アップロード → OCR → 異常値スクリーニング → レポート生成
+  // S3へ画像アップロード → OCR → 異常値スクリーニング → レポート生成 → 画像削除
   uploadAndAnalyze: protectedProcedure
     .input(
       z.object({
-        imageBase64: z.string(), // base64エンコードされた画像
+        imageBase64: z.string(),
         mimeType: z.string().default("image/jpeg"),
-        patientId: z.number().optional(),
-        testDate: z.string().optional(), // ISO date string
+        testDate: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // 1. S3に画像をアップロード
+      // 1. S3に画像を一時アップロード
       const imageBuffer = Buffer.from(input.imageBase64, "base64");
-      const fileKey = `blood-tests/${ctx.user.id}/${nanoid()}.jpg`;
+      const fileKey = `blood-tests-tmp/${ctx.user.id}/${nanoid()}.jpg`;
       const { url: imageUrl } = await storagePut(fileKey, imageBuffer, input.mimeType);
 
       // 2. DBに採血記録を作成（processing状態）
       const record = await createBloodTestRecord({
         userId: ctx.user.id,
-        patientId: input.patientId,
-        imageUrl,
-        imageKey: fileKey,
         testDate: input.testDate ? new Date(input.testDate) : undefined,
         status: "processing",
       });
@@ -294,13 +237,16 @@ ${JSON.stringify(abnormalValues, null, 2)}
         const reportRecord = await createAssessmentReport({
           bloodTestRecordId: recordId,
           userId: ctx.user.id,
-          patientId: input.patientId,
           abnormalValues: reportData.abnormalSummary,
           predictedConditions: reportData.predictedConditions,
           observationPoints: reportData.observationPoints,
           recordSummary: reportData.recordSummary,
           fullReportText: reportData.fullReport,
         });
+
+        // 8. S3から画像を削除（読み取り完了後、プライバシー保護のため）
+        await storageDelete(fileKey);
+        console.log(`[Privacy] Image deleted from S3 after OCR: ${fileKey}`);
 
         return {
           recordId,
@@ -309,10 +255,11 @@ ${JSON.stringify(abnormalValues, null, 2)}
           screeningResults,
           abnormalValues,
           report: reportData,
-          imageUrl,
         };
       } catch (error) {
-        // エラー時はDBを更新
+        // エラー時もS3画像を削除
+        await storageDelete(fileKey);
+        // DBを更新
         await updateBloodTestRecord(recordId, {
           status: "error",
           errorMessage: error instanceof Error ? error.message : "Unknown error",
@@ -327,9 +274,7 @@ ${JSON.stringify(abnormalValues, null, 2)}
 const reportRouter = router({
   list: protectedProcedure
     .input(z.object({ patientId: z.number().optional() }))
-    .query(({ ctx, input }) =>
-      getAssessmentReportsByUserId(ctx.user.id, input.patientId)
-    ),
+    .query(({ ctx }) => getAssessmentReportsByUserId(ctx.user.id)),
 
   get: protectedProcedure
     .input(z.object({ id: z.number() }))
@@ -352,7 +297,6 @@ export const appRouter = router({
       return { success: true } as const;
     }),
   }),
-  patient: patientRouter,
   bloodTest: bloodTestRouter,
   report: reportRouter,
 });

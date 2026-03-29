@@ -15,6 +15,13 @@
       "when": 1774815872495,
       "tag": "0001_perpetual_viper",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1774817094662,
+      "tag": "0002_sleepy_hawkeye",
+      "breakpoints": true
     }
   ]
 }

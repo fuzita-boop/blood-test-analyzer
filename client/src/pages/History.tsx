@@ -16,7 +16,6 @@ import {
   CheckCircle,
   Clock,
   AlertCircle,
-  Image,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -55,18 +54,10 @@ function StatusBadge({ status }: { status: string }) {
 export default function History() {
   const [search, setSearch] = useState("");
   const { data: records, isLoading } = trpc.bloodTest.list.useQuery({ patientId: undefined });
-  const { data: patients } = trpc.patient.list.useQuery();
-
-  const patientMap = new Map(patients?.map((p) => [p.id, p]) ?? []);
 
   const filtered = records?.filter((r) => {
     if (!search) return true;
-    const patient = r.patientId ? patientMap.get(r.patientId) : null;
-    return (
-      String(r.id).includes(search) ||
-      patient?.name.includes(search) ||
-      patient?.patientCode?.includes(search)
-    );
+    return String(r.id).includes(search);
   }) ?? [];
 
   return (
@@ -90,7 +81,7 @@ export default function History() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="ID・患者名で検索..."
+            placeholder="解析IDで検索..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9 h-9 text-sm"
@@ -124,7 +115,6 @@ export default function History() {
         ) : (
           <div className="space-y-3">
             {filtered.map((record) => {
-              const patient = record.patientId ? patientMap.get(record.patientId) : null;
               const extractedData = record.extractedData as { items?: unknown[] } | null;
               const itemCount = extractedData?.items?.length ?? 0;
 
@@ -132,17 +122,9 @@ export default function History() {
                 <Card key={record.id} className="border-border shadow-none hover:border-primary/30 transition-colors">
                   <CardContent className="p-4">
                     <div className="flex items-center gap-4">
-                      {/* Image thumbnail */}
-                      <div className="w-14 h-14 rounded-lg bg-muted flex items-center justify-center shrink-0 overflow-hidden border border-border">
-                        {record.imageUrl ? (
-                          <img
-                            src={record.imageUrl}
-                            alt="採血データ"
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <Image className="w-5 h-5 text-muted-foreground" />
-                        )}
+                      {/* Icon */}
+                      <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center shrink-0 border border-border">
+                        <FileText className="w-5 h-5 text-muted-foreground" />
                       </div>
 
                       {/* Info */}
@@ -151,14 +133,9 @@ export default function History() {
                           <span className="text-sm font-medium text-foreground">
                             解析 #{record.id}
                           </span>
-                          {patient && (
-                            <Badge variant="secondary" className="text-xs">
-                              {patient.name}
-                            </Badge>
-                          )}
                           <StatusBadge status={record.status} />
                         </div>
-                        <div className="flex items-center gap-3 mt-1.5">
+                        <div className="flex items-center gap-3 mt-1.5 flex-wrap">
                           <span className="text-xs text-muted-foreground">
                             {format(new Date(record.createdAt), "yyyy年M月d日 HH:mm", { locale: ja })}
                           </span>

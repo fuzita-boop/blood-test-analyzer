@@ -100,3 +100,22 @@ export async function storageGet(relKey: string): Promise<{ key: string; url: st
     url: await buildDownloadUrl(baseUrl, key, apiKey),
   };
 }
+
+export async function storageDelete(relKey: string): Promise<void> {
+  const { baseUrl, apiKey } = getStorageConfig();
+  const key = normalizeKey(relKey);
+  const deleteUrl = new URL("v1/storage/delete", ensureTrailingSlash(baseUrl));
+  deleteUrl.searchParams.set("path", key);
+  try {
+    const response = await fetch(deleteUrl, {
+      method: "DELETE",
+      headers: buildAuthHeaders(apiKey),
+    });
+    if (!response.ok) {
+      console.warn(`[Storage] Delete failed for key ${key}: ${response.status} ${response.statusText}`);
+    }
+  } catch (err) {
+    // 削除失敗はログのみ（解析フローをブロックしない）
+    console.warn(`[Storage] Delete error for key ${key}:`, err);
+  }
+}

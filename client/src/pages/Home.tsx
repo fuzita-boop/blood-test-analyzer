@@ -7,12 +7,12 @@ import { Link } from "wouter";
 import {
   Upload,
   FileText,
-  Users,
   AlertTriangle,
   CheckCircle,
   Clock,
   ArrowRight,
   Activity,
+  ShieldCheck,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
@@ -34,7 +34,6 @@ function StatusBadge({ status }: { status: string }) {
 
 export default function Home() {
   const { data: records, isLoading: recordsLoading } = trpc.bloodTest.list.useQuery({ patientId: undefined });
-  const { data: patients, isLoading: patientsLoading } = trpc.patient.list.useQuery();
   const { data: reports } = trpc.report.list.useQuery({ patientId: undefined });
 
   const completedCount = records?.filter((r) => r.status === "completed").length ?? 0;
@@ -43,7 +42,7 @@ export default function Home() {
 
   return (
     <AppLayout>
-      <div className="p-6 lg:p-8 max-w-6xl mx-auto space-y-8">
+      <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-8">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -61,7 +60,7 @@ export default function Home() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <Card className="border-border shadow-none">
             <CardContent className="p-5">
               <div className="flex items-center justify-between mb-3">
@@ -97,22 +96,10 @@ export default function Home() {
               <p className="text-2xl font-bold text-foreground">{processingCount}</p>
             </CardContent>
           </Card>
-
-          <Card className="border-border shadow-none">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-9 h-9 rounded-lg bg-violet-50 flex items-center justify-center">
-                  <Users className="w-4 h-4 text-violet-600" />
-                </div>
-                <span className="text-xs text-muted-foreground">患者数</span>
-              </div>
-              <p className="text-2xl font-bold text-foreground">{patients?.length ?? 0}</p>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Link href="/upload">
             <Card className="border-border shadow-none hover:border-primary/40 hover:shadow-sm transition-all cursor-pointer group">
               <CardContent className="p-5 flex items-center gap-4">
@@ -142,21 +129,18 @@ export default function Home() {
               </CardContent>
             </Card>
           </Link>
+        </div>
 
-          <Link href="/patients">
-            <Card className="border-border shadow-none hover:border-primary/40 hover:shadow-sm transition-all cursor-pointer group">
-              <CardContent className="p-5 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                  <Users className="w-5 h-5 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground">患者を管理</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">患者情報と経時変化を追跡</p>
-                </div>
-                <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-              </CardContent>
-            </Card>
-          </Link>
+        {/* Privacy Notice */}
+        <div className="flex items-start gap-3 p-4 rounded-lg bg-emerald-50 border border-emerald-200">
+          <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-xs font-medium text-emerald-700">プライバシー保護</p>
+            <p className="text-xs text-emerald-600 mt-0.5 leading-relaxed">
+              アップロードされた画像はAI解析後に<strong>自動削除</strong>されます。
+              氏名・生年月日・ID番号などの個人情報は抽出・保存しません。患者管理機能はありません。
+            </p>
+          </div>
         </div>
 
         {/* Recent Records */}

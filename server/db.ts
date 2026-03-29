@@ -3,10 +3,8 @@ import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
   users,
-  patients,
   bloodTestRecords,
   assessmentReports,
-  InsertPatient,
   InsertBloodTestRecord,
   InsertAssessmentReport,
 } from "../drizzle/schema";
@@ -60,40 +58,6 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// ── Patients ───────────────────────────────────────────────────────────────
-
-export async function createPatient(data: InsertPatient) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const [result] = await db.insert(patients).values(data).$returningId();
-  return result;
-}
-
-export async function getPatientsByUserId(userId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(patients).where(eq(patients.userId, userId)).orderBy(desc(patients.createdAt));
-}
-
-export async function getPatientById(id: number, userId: number) {
-  const db = await getDb();
-  if (!db) return undefined;
-  const result = await db.select().from(patients).where(and(eq(patients.id, id), eq(patients.userId, userId))).limit(1);
-  return result[0];
-}
-
-export async function updatePatient(id: number, userId: number, data: Partial<InsertPatient>) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  await db.update(patients).set(data).where(and(eq(patients.id, id), eq(patients.userId, userId)));
-}
-
-export async function deletePatient(id: number, userId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  await db.delete(patients).where(and(eq(patients.id, id), eq(patients.userId, userId)));
-}
-
 // ── Blood Test Records ─────────────────────────────────────────────────────
 
 export async function createBloodTestRecord(data: InsertBloodTestRecord) {
@@ -103,19 +67,24 @@ export async function createBloodTestRecord(data: InsertBloodTestRecord) {
   return result;
 }
 
-export async function getBloodTestRecordsByUserId(userId: number, patientId?: number) {
+export async function getBloodTestRecordsByUserId(userId: number) {
   const db = await getDb();
   if (!db) return [];
-  const conditions = patientId
-    ? and(eq(bloodTestRecords.userId, userId), eq(bloodTestRecords.patientId, patientId))
-    : eq(bloodTestRecords.userId, userId);
-  return db.select().from(bloodTestRecords).where(conditions).orderBy(desc(bloodTestRecords.createdAt));
+  return db
+    .select()
+    .from(bloodTestRecords)
+    .where(eq(bloodTestRecords.userId, userId))
+    .orderBy(desc(bloodTestRecords.createdAt));
 }
 
 export async function getBloodTestRecordById(id: number, userId: number) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(bloodTestRecords).where(and(eq(bloodTestRecords.id, id), eq(bloodTestRecords.userId, userId))).limit(1);
+  const result = await db
+    .select()
+    .from(bloodTestRecords)
+    .where(and(eq(bloodTestRecords.id, id), eq(bloodTestRecords.userId, userId)))
+    .limit(1);
   return result[0];
 }
 
@@ -137,22 +106,31 @@ export async function createAssessmentReport(data: InsertAssessmentReport) {
 export async function getAssessmentReportByRecordId(bloodTestRecordId: number) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(assessmentReports).where(eq(assessmentReports.bloodTestRecordId, bloodTestRecordId)).limit(1);
+  const result = await db
+    .select()
+    .from(assessmentReports)
+    .where(eq(assessmentReports.bloodTestRecordId, bloodTestRecordId))
+    .limit(1);
   return result[0];
 }
 
-export async function getAssessmentReportsByUserId(userId: number, patientId?: number) {
+export async function getAssessmentReportsByUserId(userId: number) {
   const db = await getDb();
   if (!db) return [];
-  const conditions = patientId
-    ? and(eq(assessmentReports.userId, userId), eq(assessmentReports.patientId, patientId))
-    : eq(assessmentReports.userId, userId);
-  return db.select().from(assessmentReports).where(conditions).orderBy(desc(assessmentReports.createdAt));
+  return db
+    .select()
+    .from(assessmentReports)
+    .where(eq(assessmentReports.userId, userId))
+    .orderBy(desc(assessmentReports.createdAt));
 }
 
 export async function getAssessmentReportById(id: number, userId: number) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(assessmentReports).where(and(eq(assessmentReports.id, id), eq(assessmentReports.userId, userId))).limit(1);
+  const result = await db
+    .select()
+    .from(assessmentReports)
+    .where(and(eq(assessmentReports.id, id), eq(assessmentReports.userId, userId)))
+    .limit(1);
   return result[0];
 }
