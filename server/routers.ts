@@ -36,6 +36,7 @@ const bloodTestRouter = router({
         imageBase64: z.string(),
         mimeType: z.string().default("image/jpeg"),
         testDate: z.string().optional(),
+        gender: z.enum(["male", "female", "unknown"]).default("unknown"),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -133,11 +134,12 @@ const bloodTestRouter = router({
           testDate: string | null;
         };
 
-        // 4. 異常値スクリーニング
-        const screeningResults = screenAbnormalValues(extractedData.items);
-        const abnormalValues = getAbnormalValues(screeningResults);
+        // 4. 異常値スクリーニング（性別を考慮）
+        const screeningResults = screenAbnormalValues(extractedData.items, input.gender);
+        const abnormalValues = screeningResults.filter(r => r.status !== "normal");
 
         // 5. LLMでアセスメントレポート生成
+        const genderLabel = input.gender === "male" ? "男性" : input.gender === "female" ? "女性" : "不明";
         const reportResponse = await invokeLLM({
           messages: [
             {
@@ -145,7 +147,7 @@ const bloodTestRouter = router({
               content: `あなたは訪問看護・介護施設スタッフ向けの医療データ解析アシスタントです。
 採血データの異常値に基づいてアセスメント補助レポートを生成します。
 以下の制約を厳守してください：
-1. 診断は行わず「〜の可能性」「〜の疑い」という表現を使用
+1. 診断は行わず「～の可能性」「～の疊い」という表現を使用
 2. 個人情報は一切含めない
 3. 日本人間ドック学会・各専門学会のガイドラインに基づく客観的情報のみ
 4. 訪問看護記録・申し送りで使用できる簡潔な表現`,
@@ -153,6 +155,8 @@ const bloodTestRouter = router({
             {
               role: "user",
               content: `以下の採血データの異常値に基づいてアセスメントレポートを生成してください。
+
+【性別】${genderLabel}
 
 【全検査結果】
 ${JSON.stringify(screeningResults, null, 2)}

@@ -1,20 +1,27 @@
 /**
  * 一般的な基準値テーブル（日本人間ドック学会・各専門学会ガイドライン準拠）
  *
+ * 【男女別基準値】
+ * 以下の項目は男女で基準値が異なるため、gender パラメータで切り替える:
+ *   RBC, Hb(HGB), Ht(HCT), UA, γ-GTP, CK, Ferritin など
+ *
  * 【単位統一方針】
- * 日本の採血検査票で最も一般的に記載される単位・スケールに統一する。
- *   WBC: /μL 単位（例: 5800 /μL）  ← 検査票では 5800 や 58(×10²) で記載されることが多い
+ *   WBC: /μL 単位（例: 5800 /μL）
  *   RBC: ×10⁴/μL 単位（例: 450 ×10⁴/μL）
  *   PLT: ×10³/μL 単位（例: 220 ×10³/μL）
- *
- * OCR抽出時に単位を正しく読み取り、normalizeValue()で内部スケールに変換する。
  */
+
+export type Gender = "male" | "female" | "unknown";
 
 export interface ReferenceRange {
   min?: number;
   max?: number;
-  unit: string;           // 表示用単位
-  internalUnit: string;   // スクリーニング比較用の内部単位（統一済み）
+  minMale?: number;
+  maxMale?: number;
+  minFemale?: number;
+  maxFemale?: number;
+  unit: string;
+  internalUnit: string;
   fullName: string;
   category: string;
   criticalLow?: number;
@@ -24,21 +31,20 @@ export interface ReferenceRange {
 export interface ScreeningResult {
   item: string;
   fullName: string;
-  value: number;          // 正規化後の値
-  displayValue: number;   // 元の表示値
+  value: number;
+  displayValue: number;
   unit: string;
   status: "high" | "low" | "critical_high" | "critical_low" | "normal";
   referenceMin?: number;
   referenceMax?: number;
   category: string;
+  genderSpecific?: boolean;
 }
 
 // ── 基準値テーブル ────────────────────────────────────────────────────────────
-// 内部スケール統一：WBC=/μL, RBC=×10⁴/μL, PLT=×10³/μL
 export const REFERENCE_VALUES: Record<string, ReferenceRange> = {
 
   // ── 血算（CBC） ──────────────────────────────────────────────────────────
-  // WBC: 内部単位 /μL。正常範囲 3300〜8600 /μL（日本人間ドック学会）
   WBC: {
     min: 3300, max: 8600,
     unit: "/μL", internalUnit: "/μL",
@@ -58,53 +64,82 @@ export const REFERENCE_VALUES: Record<string, ReferenceRange> = {
     criticalLow: 2000, criticalHigh: 30000,
   },
 
-  // RBC: 内部単位 ×10⁴/μL。正常範囲 386〜577 ×10⁴/μL（男女共通幅）
+  // RBC: 男性 427〜570、女性 376〜500 ×10⁴/μL
   RBC: {
-    min: 386, max: 577,
+    minMale: 427, maxMale: 570,
+    minFemale: 376, maxFemale: 500,
+    min: 376, max: 570,
     unit: "×10⁴/μL", internalUnit: "×10⁴/μL",
     fullName: "赤血球数", category: "血算",
   },
   "赤血球数": {
-    min: 386, max: 577,
+    minMale: 427, maxMale: 570,
+    minFemale: 376, maxFemale: 500,
+    min: 376, max: 570,
     unit: "×10⁴/μL", internalUnit: "×10⁴/μL",
     fullName: "赤血球数", category: "血算",
   },
   "赤血球": {
-    min: 386, max: 577,
+    minMale: 427, maxMale: 570,
+    minFemale: 376, maxFemale: 500,
+    min: 376, max: 570,
     unit: "×10⁴/μL", internalUnit: "×10⁴/μL",
     fullName: "赤血球数", category: "血算",
   },
 
-  // HGB: g/dL
+  // Hb: 男性 13.7〜16.8、女性 11.6〜14.8 g/dL
   HGB: {
-    min: 11.3, max: 17.2,
+    minMale: 13.7, maxMale: 16.8,
+    minFemale: 11.6, maxFemale: 14.8,
+    min: 11.6, max: 16.8,
     unit: "g/dL", internalUnit: "g/dL",
     fullName: "ヘモグロビン", category: "血算",
     criticalLow: 7.0, criticalHigh: 20.0,
   },
   Hb: {
-    min: 11.3, max: 17.2,
+    minMale: 13.7, maxMale: 16.8,
+    minFemale: 11.6, maxFemale: 14.8,
+    min: 11.6, max: 16.8,
     unit: "g/dL", internalUnit: "g/dL",
     fullName: "ヘモグロビン", category: "血算",
     criticalLow: 7.0, criticalHigh: 20.0,
   },
   "ヘモグロビン": {
-    min: 11.3, max: 17.2,
+    minMale: 13.7, maxMale: 16.8,
+    minFemale: 11.6, maxFemale: 14.8,
+    min: 11.6, max: 16.8,
     unit: "g/dL", internalUnit: "g/dL",
     fullName: "ヘモグロビン", category: "血算",
     criticalLow: 7.0, criticalHigh: 20.0,
   },
 
-  // HCT: %
-  HCT: { min: 33.4, max: 51.8, unit: "%", internalUnit: "%", fullName: "ヘマトクリット", category: "血算" },
-  Ht: { min: 33.4, max: 51.8, unit: "%", internalUnit: "%", fullName: "ヘマトクリット", category: "血算" },
-  "ヘマトクリット": { min: 33.4, max: 51.8, unit: "%", internalUnit: "%", fullName: "ヘマトクリット", category: "血算" },
+  // Ht: 男性 40.7〜50.1、女性 35.1〜44.4 %
+  HCT: {
+    minMale: 40.7, maxMale: 50.1,
+    minFemale: 35.1, maxFemale: 44.4,
+    min: 35.1, max: 50.1,
+    unit: "%", internalUnit: "%",
+    fullName: "ヘマトクリット", category: "血算",
+  },
+  Ht: {
+    minMale: 40.7, maxMale: 50.1,
+    minFemale: 35.1, maxFemale: 44.4,
+    min: 35.1, max: 50.1,
+    unit: "%", internalUnit: "%",
+    fullName: "ヘマトクリット", category: "血算",
+  },
+  "ヘマトクリット": {
+    minMale: 40.7, maxMale: 50.1,
+    minFemale: 35.1, maxFemale: 44.4,
+    min: 35.1, max: 50.1,
+    unit: "%", internalUnit: "%",
+    fullName: "ヘマトクリット", category: "血算",
+  },
 
   MCV: { min: 79.0, max: 100.0, unit: "fL", internalUnit: "fL", fullName: "平均赤血球容積", category: "血算" },
   MCH: { min: 26.3, max: 34.3, unit: "pg", internalUnit: "pg", fullName: "平均赤血球ヘモグロビン量", category: "血算" },
   MCHC: { min: 31.7, max: 35.3, unit: "g/dL", internalUnit: "g/dL", fullName: "平均赤血球ヘモグロビン濃度", category: "血算" },
 
-  // PLT: 内部単位 ×10³/μL。正常範囲 158〜348 ×10³/μL
   PLT: {
     min: 158, max: 348,
     unit: "×10³/μL", internalUnit: "×10³/μL",
@@ -129,11 +164,44 @@ export const REFERENCE_VALUES: Record<string, ReferenceRange> = {
   GOT: { min: 13, max: 30, unit: "U/L", internalUnit: "U/L", fullName: "AST（GOT）", category: "肝機能", criticalHigh: 1000 },
   ALT: { min: 7, max: 42, unit: "U/L", internalUnit: "U/L", fullName: "ALT（GPT）", category: "肝機能", criticalHigh: 1000 },
   GPT: { min: 7, max: 42, unit: "U/L", internalUnit: "U/L", fullName: "ALT（GPT）", category: "肝機能", criticalHigh: 1000 },
-  "γ-GT": { min: 0, max: 50, unit: "U/L", internalUnit: "U/L", fullName: "γ-GTP", category: "肝機能" },
-  "γGTP": { min: 0, max: 50, unit: "U/L", internalUnit: "U/L", fullName: "γ-GTP", category: "肝機能" },
-  "γ-GTP": { min: 0, max: 50, unit: "U/L", internalUnit: "U/L", fullName: "γ-GTP", category: "肝機能" },
-  "GGT": { min: 0, max: 50, unit: "U/L", internalUnit: "U/L", fullName: "γ-GTP", category: "肝機能" },
-  "γGT": { min: 0, max: 50, unit: "U/L", internalUnit: "U/L", fullName: "γ-GTP", category: "肝機能" },
+
+  // γ-GTP: 男性 0〜70、女性 0〜30 U/L
+  "γ-GT": {
+    minMale: 0, maxMale: 70,
+    minFemale: 0, maxFemale: 30,
+    min: 0, max: 70,
+    unit: "U/L", internalUnit: "U/L",
+    fullName: "γ-GTP", category: "肝機能",
+  },
+  "γGTP": {
+    minMale: 0, maxMale: 70,
+    minFemale: 0, maxFemale: 30,
+    min: 0, max: 70,
+    unit: "U/L", internalUnit: "U/L",
+    fullName: "γ-GTP", category: "肝機能",
+  },
+  "γ-GTP": {
+    minMale: 0, maxMale: 70,
+    minFemale: 0, maxFemale: 30,
+    min: 0, max: 70,
+    unit: "U/L", internalUnit: "U/L",
+    fullName: "γ-GTP", category: "肝機能",
+  },
+  "GGT": {
+    minMale: 0, maxMale: 70,
+    minFemale: 0, maxFemale: 30,
+    min: 0, max: 70,
+    unit: "U/L", internalUnit: "U/L",
+    fullName: "γ-GTP", category: "肝機能",
+  },
+  "γGT": {
+    minMale: 0, maxMale: 70,
+    minFemale: 0, maxFemale: 30,
+    min: 0, max: 70,
+    unit: "U/L", internalUnit: "U/L",
+    fullName: "γ-GTP", category: "肝機能",
+  },
+
   ALP: { min: 38, max: 113, unit: "U/L", internalUnit: "U/L", fullName: "アルカリホスファターゼ", category: "肝機能" },
   LDH: { min: 124, max: 222, unit: "U/L", internalUnit: "U/L", fullName: "乳酸脱水素酵素", category: "肝機能" },
   T_BIL: { min: 0.2, max: 1.2, unit: "mg/dL", internalUnit: "mg/dL", fullName: "総ビリルビン", category: "肝機能", criticalHigh: 15.0 },
@@ -147,12 +215,50 @@ export const REFERENCE_VALUES: Record<string, ReferenceRange> = {
   // ── 腎機能 ───────────────────────────────────────────────────────────────
   BUN: { min: 8, max: 20, unit: "mg/dL", internalUnit: "mg/dL", fullName: "尿素窒素", category: "腎機能", criticalHigh: 100 },
   "尿素窒素": { min: 8, max: 20, unit: "mg/dL", internalUnit: "mg/dL", fullName: "尿素窒素", category: "腎機能" },
-  CRE: { min: 0.46, max: 1.04, unit: "mg/dL", internalUnit: "mg/dL", fullName: "クレアチニン", category: "腎機能", criticalHigh: 10.0 },
-  Cr: { min: 0.46, max: 1.04, unit: "mg/dL", internalUnit: "mg/dL", fullName: "クレアチニン", category: "腎機能", criticalHigh: 10.0 },
-  "クレアチニン": { min: 0.46, max: 1.04, unit: "mg/dL", internalUnit: "mg/dL", fullName: "クレアチニン", category: "腎機能", criticalHigh: 10.0 },
+
+  // Cr: 男性 0.65〜1.07、女性 0.46〜0.79 mg/dL
+  CRE: {
+    minMale: 0.65, maxMale: 1.07,
+    minFemale: 0.46, maxFemale: 0.79,
+    min: 0.46, max: 1.07,
+    unit: "mg/dL", internalUnit: "mg/dL",
+    fullName: "クレアチニン", category: "腎機能",
+    criticalHigh: 10.0,
+  },
+  Cr: {
+    minMale: 0.65, maxMale: 1.07,
+    minFemale: 0.46, maxFemale: 0.79,
+    min: 0.46, max: 1.07,
+    unit: "mg/dL", internalUnit: "mg/dL",
+    fullName: "クレアチニン", category: "腎機能",
+    criticalHigh: 10.0,
+  },
+  "クレアチニン": {
+    minMale: 0.65, maxMale: 1.07,
+    minFemale: 0.46, maxFemale: 0.79,
+    min: 0.46, max: 1.07,
+    unit: "mg/dL", internalUnit: "mg/dL",
+    fullName: "クレアチニン", category: "腎機能",
+    criticalHigh: 10.0,
+  },
+
   eGFR: { min: 60, max: 9999, unit: "mL/min/1.73m²", internalUnit: "mL/min/1.73m²", fullName: "推算糸球体濾過量", category: "腎機能" },
-  UA: { min: 2.1, max: 7.0, unit: "mg/dL", internalUnit: "mg/dL", fullName: "尿酸", category: "腎機能" },
-  "尿酸": { min: 2.1, max: 7.0, unit: "mg/dL", internalUnit: "mg/dL", fullName: "尿酸", category: "腎機能" },
+
+  // UA: 男性 3.7〜7.0、女性 2.1〜5.5 mg/dL
+  UA: {
+    minMale: 3.7, maxMale: 7.0,
+    minFemale: 2.1, maxFemale: 5.5,
+    min: 2.1, max: 7.0,
+    unit: "mg/dL", internalUnit: "mg/dL",
+    fullName: "尿酸", category: "腎機能",
+  },
+  "尿酸": {
+    minMale: 3.7, maxMale: 7.0,
+    minFemale: 2.1, maxFemale: 5.5,
+    min: 2.1, max: 7.0,
+    unit: "mg/dL", internalUnit: "mg/dL",
+    fullName: "尿酸", category: "腎機能",
+  },
 
   // ── 糖代謝 ───────────────────────────────────────────────────────────────
   GLU: { min: 70, max: 109, unit: "mg/dL", internalUnit: "mg/dL", fullName: "血糖（空腹時）", category: "糖代謝", criticalLow: 50, criticalHigh: 500 },
@@ -186,6 +292,7 @@ export const REFERENCE_VALUES: Record<string, ReferenceRange> = {
   P: { min: 2.5, max: 4.5, unit: "mg/dL", internalUnit: "mg/dL", fullName: "無機リン", category: "電解質" },
 
   // ── 炎症・感染 ───────────────────────────────────────────────────────────
+  // CRP: mg/dL 基準（一部検査票は mg/L で記載 → 変換が必要）
   CRP: { min: 0, max: 0.14, unit: "mg/dL", internalUnit: "mg/dL", fullName: "C反応性蛋白", category: "炎症", criticalHigh: 10.0 },
   "C反応性蛋白": { min: 0, max: 0.14, unit: "mg/dL", internalUnit: "mg/dL", fullName: "C反応性蛋白", category: "炎症" },
   ESR: { min: 0, max: 20, unit: "mm/h", internalUnit: "mm/h", fullName: "赤血球沈降速度", category: "炎症" },
@@ -206,7 +313,14 @@ export const REFERENCE_VALUES: Record<string, ReferenceRange> = {
   FT3: { min: 2.3, max: 4.0, unit: "pg/mL", internalUnit: "pg/mL", fullName: "遊離トリヨードサイロニン", category: "甲状腺" },
 
   // ── 心筋マーカー ─────────────────────────────────────────────────────────
-  CK: { min: 40, max: 200, unit: "U/L", internalUnit: "U/L", fullName: "クレアチンキナーゼ", category: "心筋マーカー" },
+  // CK: 男性 59〜248、女性 41〜153 U/L
+  CK: {
+    minMale: 59, maxMale: 248,
+    minFemale: 41, maxFemale: 153,
+    min: 41, max: 248,
+    unit: "U/L", internalUnit: "U/L",
+    fullName: "クレアチンキナーゼ", category: "心筋マーカー",
+  },
   "CK-MB": { min: 0, max: 25, unit: "U/L", internalUnit: "U/L", fullName: "CK-MB", category: "心筋マーカー" },
   BNP: { min: 0, max: 18.4, unit: "pg/mL", internalUnit: "pg/mL", fullName: "脳性ナトリウム利尿ペプチド", category: "心筋マーカー", criticalHigh: 200 },
   "NT-proBNP": { min: 0, max: 125, unit: "pg/mL", internalUnit: "pg/mL", fullName: "NT-proBNP", category: "心筋マーカー" },
@@ -219,56 +333,75 @@ export const REFERENCE_VALUES: Record<string, ReferenceRange> = {
   LIP: { min: 13, max: 55, unit: "U/L", internalUnit: "U/L", fullName: "リパーゼ", category: "膵臓" },
 };
 
+// ── 単位正規化ユーティリティ ──────────────────────────────────────────────────
+/**
+ * 単位文字列を正規化する
+ * - 全角→半角変換
+ * - スペース除去
+ * - 小文字のμ/Lを大文字に統一
+ */
+function normalizeUnitString(unit: string): string {
+  return unit
+    .trim()
+    // 全角英数字・記号を半角に変換
+    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    // 全角スペース・スペースを除去
+    .replace(/[\s　]+/g, "")
+    // 全角ギリシャ文字の正規化（γ）
+    .replace(/γ/g, "γ")
+    // 小文字 l → 大文字 L（μl → μL）
+    .replace(/μl/g, "μL")
+    // 上付き文字の正規化（²³⁴⁶）
+    .replace(/\^2/g, "²")
+    .replace(/\^3/g, "³")
+    .replace(/\^4/g, "⁴")
+    .replace(/\^6/g, "⁶");
+}
+
 // ── 単位変換テーブル ──────────────────────────────────────────────────────────
-// OCRが読み取った単位を内部単位に変換するための係数
-// { fromUnit: { toUnit: multiplier } }
+// 正規化済み単位文字列をキーとして使用
 const UNIT_CONVERSION: Record<string, Record<string, number>> = {
   // WBC: ×10³/μL → /μL (×1000)
-  "×10³/μl": { "/μl": 1000 },
   "×10³/μL": { "/μL": 1000 },
-  "10³/μl": { "/μl": 1000 },
   "10³/μL": { "/μL": 1000 },
-  "千/μl": { "/μl": 1000 },
   "千/μL": { "/μL": 1000 },
-
-  // WBC: ×10²/μL → /μL (×100)  ← 一部検査票で使用
-  "×10²/μl": { "/μl": 100 },
+  // WBC: ×10²/μL → /μL (×100)
   "×10²/μL": { "/μL": 100 },
+  "10²/μL": { "/μL": 100 },
 
   // RBC: ×10⁶/μL → ×10⁴/μL (×100)
-  // 1×10⁶/μL = 100×10⁴/μL
-  "×10⁶/μl": { "×10⁴/μl": 100 },
   "×10⁶/μL": { "×10⁴/μL": 100 },
-  "10⁶/μl": { "×10⁴/μl": 100 },
   "10⁶/μL": { "×10⁴/μL": 100 },
-  "百万/μl": { "×10⁴/μl": 100 },
   "百万/μL": { "×10⁴/μL": 100 },
-
-  // RBC: ×10⁴/μL → ×10⁴/μL (×1, no conversion needed but listed for clarity)
-  "×10⁴/μl": { "×10⁴/μl": 1 },
+  // RBC: ×10⁴/μL → ×10⁴/μL (×1, no conversion)
   "×10⁴/μL": { "×10⁴/μL": 1 },
+  "10⁴/μL": { "×10⁴/μL": 1 },
 
   // PLT: ×10⁴/μL → ×10³/μL (×10)
-  // (some labs report PLT in ×10⁴/μL, e.g. 22.0 ×10⁴/μL = 220 ×10³/μL)
+  // ※ RBCと同じ ×10⁴ 表記だが、PLTの場合は×10に変換
+  // PLT特別処理はnormalizeValue内で行う
+
+  // CRP: mg/L → mg/dL (÷10)
+  "mg/L": { "mg/dL": 0.1 },
+  "MG/L": { "mg/dL": 0.1 },
+
+  // mEq/L と mmol/L は電解質で同値（Na, K, Clは1:1）
+  "mmol/L": { "mEq/L": 1 },
+  "MMOL/L": { "mEq/L": 1 },
 };
 
 /**
  * 検査項目名の正規化（別名・英語名・OCR認識バリエーション→標準キー）
- *
- * 注意: OCRは以下のような表記を返すことがあるため、大文字小文字・括弧・スペース・ハイフンを除去してマッチング
- *   例: "ALT(GPT)", "ALT (GPT)", "AST（GOT）", "HbA1c", "HBA1C", "HBAIC", "γ-GTP", "GGT"
  */
 function normalizeItemName(name: string): string {
-  // 括弧内の別名を除去してコア名だけ抽出（例: "ALT(GPT)" → "ALT"）
   const stripped = name
     .trim()
-    .replace(/[（(].*?[）)]/g, "")  // 括弧内を除去
-    .replace(/[\s\-・·]/g, "")      // スペース・ハイフン・中点を除去
+    .replace(/[（(].*?[）)]/g, "")
+    .replace(/[\s\-・·]/g, "")
     .trim();
 
   const upper = stripped.toUpperCase();
 
-  // 大文字小文字無視のエイリアステーブル
   const aliases: Record<string, string> = {
     // 血算
     "WBC": "WBC",
@@ -288,7 +421,7 @@ function normalizeItemName(name: string): string {
     "GPT": "ALT",
     "YGTP": "γ-GTP",
     "GGTP": "γ-GTP",
-    "GGT": "γ-GTP",
+    "GGT": "GGT",
     "YGGT": "γ-GTP",
     "ALP": "ALP",
     "LDH": "LDH",
@@ -297,7 +430,7 @@ function normalizeItemName(name: string): string {
     "DBIL": "D_BIL",
     "TP": "TP",
     "ALB": "ALB",
-    // 腐機能
+    // 腎機能
     "BUN": "BUN",
     "CRE": "CRE",
     "CR": "CRE",
@@ -309,12 +442,12 @@ function normalizeItemName(name: string): string {
     "BS": "BS",
     "FBS": "FBS",
     "GLUCOSE": "GLU",
-    "HBAIC": "HbA1c",   // OCR誤認対応（数字の1をIと誤認）
+    "HBAIC": "HbA1c",
     "HBA1C": "HbA1c",
     "HBAC": "HbA1c",
     "A1C": "HbA1c",
     "HEMOGLOBINA1C": "HbA1c",
-    // 脆質代謝
+    // 脂質代謝
     "TC": "TC",
     "CHOLESTEROL": "TC",
     "LDLC": "LDL",
@@ -353,66 +486,66 @@ function normalizeItemName(name: string): string {
     "CKMB": "CK-MB",
     "BNP": "BNP",
     "NTPROBNP": "NT-proBNP",
-    "TROPONIN": "Troponin",
-    "TROPONI": "Troponin",
+    // 膵臓
+    "AMY": "AMY",
+    "AMYLASE": "AMY",
+    "LIP": "LIP",
+    "LIPASE": "LIP",
   };
 
-  // エイリアステーブルでマッチした場合はそれを返す
   if (aliases[upper]) return aliases[upper];
-
-  // エイリアステーブルにない場合は元の名前をそのまま返す（日本語名は基準値テーブルに直接登録済み）
   return name.trim();
 }
 
 /**
  * 単位を正規化して内部スケールに変換する
- * 例: WBC 5.8 ×10³/μL → 5800 /μL
- *     RBC 4.5 ×10⁶/μL → 450 ×10⁴/μL
  */
 function normalizeValue(value: number, fromUnit: string, itemKey: string): { value: number; unit: string } {
   const ref = REFERENCE_VALUES[itemKey];
   if (!ref) return { value, unit: fromUnit };
 
   const targetUnit = ref.internalUnit;
-  const fromUnitClean = fromUnit.trim();
+  // 単位文字列を正規化（大文字小文字・スペース・全角を統一）
+  const fromUnitNorm = normalizeUnitString(fromUnit);
+  const targetUnitNorm = normalizeUnitString(targetUnit);
 
-  // 同一単位なら変換不要（空文字列は除く）
-  if (fromUnitClean !== "" && fromUnitClean === targetUnit) {
+  // 同一単位なら変換不要
+  if (fromUnitNorm !== "" && fromUnitNorm === targetUnitNorm) {
     return { value, unit: targetUnit };
   }
 
-  // 大文字小文字・スペース正規化して変換テーブルを探す
-  if (fromUnitClean !== "") {
-    const conversionMap = UNIT_CONVERSION[fromUnitClean];
+  // 変換テーブルで変換
+  if (fromUnitNorm !== "") {
+    const conversionMap = UNIT_CONVERSION[fromUnitNorm];
     if (conversionMap) {
       for (const [toUnit, multiplier] of Object.entries(conversionMap)) {
-        if (toUnit.toLowerCase() === targetUnit.toLowerCase()) {
+        if (normalizeUnitString(toUnit) === targetUnitNorm) {
           return { value: value * multiplier, unit: targetUnit };
         }
       }
     }
   }
 
-  // WBC特別処理: 単位に×10³が含まれるか、単位なしで値が100未満の場合に変換（例: 5.8 → 5800）
-  if ((itemKey === "WBC" || itemKey === "白血球" || itemKey === "白血球数") && targetUnit === "/μL") {
-    const unitHasThousand = fromUnitClean.includes("10³") || fromUnitClean.includes("10^3") || fromUnitClean.toLowerCase().includes("千");
-    if (unitHasThousand || value < 100) {
+  // WBC特別処理: 単位に×10³が含まれるか、単位なしで値が100未満の場合
+  if ((itemKey === "WBC" || itemKey === "白血球" || itemKey === "白血球数") && targetUnitNorm === "/μL") {
+    const unitHasThousand = fromUnitNorm.includes("10³") || fromUnitNorm.includes("10^3") || fromUnitNorm.includes("千");
+    if (unitHasThousand || (fromUnitNorm === "" && value < 100)) {
       return { value: value * 1000, unit: "/μL" };
     }
   }
 
-  // RBC特別処理: 単位に×10⁶が含まれるか、値が10未満の場合に変換（例: 4.5 → 450）
-  if ((itemKey === "RBC" || itemKey === "赤血球" || itemKey === "赤血球数") && targetUnit === "×10⁴/μL") {
-    const unitHasMillion = fromUnitClean.includes("10⁶") || fromUnitClean.includes("10^6") || fromUnitClean.toLowerCase().includes("百万");
-    if (unitHasMillion || value < 10) {
+  // RBC特別処理: 単位に×10⁶が含まれるか、値が10未満の場合
+  if ((itemKey === "RBC" || itemKey === "赤血球" || itemKey === "赤血球数") && targetUnitNorm === "×10⁴/μL") {
+    const unitHasMillion = fromUnitNorm.includes("10⁶") || fromUnitNorm.includes("10^6") || fromUnitNorm.includes("百万");
+    if (unitHasMillion || (fromUnitNorm === "" && value < 10)) {
       return { value: value * 100, unit: "×10⁴/μL" };
     }
   }
 
-  // PLT特別処理: 単位に×10⁴が含まれるか、値が100未満の場合に変換（例: 22.0 → 220）
-  if ((itemKey === "PLT" || itemKey === "血小板" || itemKey === "血小板数") && targetUnit === "×10³/μL") {
-    const unitHasTenThousand = fromUnitClean.includes("10⁴") || fromUnitClean.includes("10^4");
-    if (unitHasTenThousand || value < 100) {
+  // PLT特別処理: 単位に×10⁴が含まれるか、値が100未満の場合
+  if ((itemKey === "PLT" || itemKey === "血小板" || itemKey === "血小板数") && targetUnitNorm === "×10³/μL") {
+    const unitHasTenThousand = fromUnitNorm.includes("10⁴") || fromUnitNorm.includes("10^4");
+    if (unitHasTenThousand || (fromUnitNorm === "" && value < 100)) {
       return { value: value * 10, unit: "×10³/μL" };
     }
   }
@@ -421,10 +554,26 @@ function normalizeValue(value: number, fromUnit: string, itemKey: string): { val
 }
 
 /**
+ * 性別に応じた基準値の min/max を取得する
+ */
+function getRefRange(ref: ReferenceRange, gender: Gender): { min?: number; max?: number } {
+  if (gender === "male" && ref.minMale !== undefined && ref.maxMale !== undefined) {
+    return { min: ref.minMale, max: ref.maxMale };
+  }
+  if (gender === "female" && ref.minFemale !== undefined && ref.maxFemale !== undefined) {
+    return { min: ref.minFemale, max: ref.maxFemale };
+  }
+  return { min: ref.min, max: ref.max };
+}
+
+/**
  * 異常値スクリーニング
+ * @param extractedItems OCRで抽出した検査項目リスト
+ * @param gender 性別（"male" | "female" | "unknown"）
  */
 export function screenAbnormalValues(
-  extractedItems: Array<{ item: string; value: number; unit?: string }>
+  extractedItems: Array<{ item: string; value: number; unit?: string }>,
+  gender: Gender = "unknown"
 ): ScreeningResult[] {
   const results: ScreeningResult[] = [];
 
@@ -432,14 +581,16 @@ export function screenAbnormalValues(
     const normalizedName = normalizeItemName(item);
     const ref = REFERENCE_VALUES[normalizedName] || REFERENCE_VALUES[item];
 
-    if (!ref) continue; // 基準値が不明な項目はスキップ
+    if (!ref) continue;
 
-    // 単位変換して内部スケールに正規化
     const { value: normalizedValue, unit: normalizedUnit } = normalizeValue(
       value,
       unit || "",
       normalizedName
     );
+
+    const { min: refMin, max: refMax } = getRefRange(ref, gender);
+    const isGenderSpecific = (ref.minMale !== undefined || ref.minFemale !== undefined);
 
     let status: ScreeningResult["status"] = "normal";
 
@@ -447,9 +598,9 @@ export function screenAbnormalValues(
       status = "critical_high";
     } else if (ref.criticalLow !== undefined && normalizedValue < ref.criticalLow) {
       status = "critical_low";
-    } else if (ref.max !== undefined && normalizedValue > ref.max) {
+    } else if (refMax !== undefined && normalizedValue > refMax) {
       status = "high";
-    } else if (ref.min !== undefined && normalizedValue < ref.min) {
+    } else if (refMin !== undefined && normalizedValue < refMin) {
       status = "low";
     }
 
@@ -458,11 +609,12 @@ export function screenAbnormalValues(
       fullName: ref.fullName,
       value: normalizedValue,
       displayValue: value,
-      unit: normalizedUnit || ref.unit,
+      unit: normalizedUnit || unit || ref.unit,
       status,
-      referenceMin: ref.min,
-      referenceMax: ref.max,
+      referenceMin: refMin,
+      referenceMax: refMax,
       category: ref.category,
+      genderSpecific: isGenderSpecific,
     });
   }
 
@@ -470,8 +622,11 @@ export function screenAbnormalValues(
 }
 
 /**
- * 異常値のみフィルタリング
+ * 異常値のみを返す（status が normal 以外）
  */
-export function getAbnormalValues(results: ScreeningResult[]): ScreeningResult[] {
-  return results.filter((r) => r.status !== "normal");
+export function getAbnormalValues(
+  extractedItems: Array<{ item: string; value: number; unit?: string }>,
+  gender: Gender = "unknown"
+): ScreeningResult[] {
+  return screenAbnormalValues(extractedItems, gender).filter(r => r.status !== "normal");
 }

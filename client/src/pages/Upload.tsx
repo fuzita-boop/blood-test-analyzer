@@ -15,6 +15,7 @@ import {
   CheckCircle,
   FlaskConical,
   ShieldCheck,
+  User,
 } from "lucide-react";
 
 export default function Upload() {
@@ -23,6 +24,7 @@ export default function Upload() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [testDate, setTestDate] = useState<string>("");
+  const [gender, setGender] = useState<"male" | "female" | "unknown">("unknown");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisStep, setAnalysisStep] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -86,6 +88,7 @@ export default function Upload() {
       imageBase64: base64,
       mimeType: selectedFile.type,
       testDate: testDate || undefined,
+      gender,
     });
   };
 
@@ -188,14 +191,47 @@ export default function Upload() {
         <Card className="border-border shadow-none">
           <CardContent className="p-6">
             <h2 className="text-sm font-semibold text-foreground mb-4">オプション設定</h2>
-            <div className="space-y-2">
-              <Label className="text-xs font-medium text-muted-foreground">採血日（任意）</Label>
-              <Input
-                type="date"
-                value={testDate}
-                onChange={(e) => setTestDate(e.target.value)}
-                className="h-9 text-sm max-w-xs"
-              />
+            <div className="space-y-5">
+              {/* 性別選択 */}
+              <div className="space-y-2">
+                <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5" />
+                  性別（男女別基準値に使用）
+                </Label>
+                <div className="flex gap-2">
+                  {([
+                    { value: "male", label: "男性" },
+                    { value: "female", label: "女性" },
+                    { value: "unknown", label: "不明" },
+                  ] as const).map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setGender(opt.value)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all ${
+                        gender === opt.value
+                          ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                          : "bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  RBC・Hb・Ht・尿酸・γ-GTP・CKなどは男女で基準値が異なります。性別を選択するとより正確なスクリーニングが行われます。
+                </p>
+              </div>
+              {/* 採血日 */}
+              <div className="space-y-2">
+                <Label className="text-xs font-medium text-muted-foreground">採血日（任意）</Label>
+                <Input
+                  type="date"
+                  value={testDate}
+                  onChange={(e) => setTestDate(e.target.value)}
+                  className="h-9 text-sm max-w-xs"
+                />
+              </div>
             </div>
           </CardContent>
         </Card>
