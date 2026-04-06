@@ -77,7 +77,7 @@ const bloodTestRouter = router({
 以下のJSON形式で返してください：
 {
   "items": [
-    { "item": "検査項目名（略称）", "value": 数値, "unit": "単位" },
+    { "item": "検査項目名（略称）", "value": 数値またはnull, "unit": "単位" },
     ...
   ],
   "testDate": "採血日（YYYY-MM-DD形式、不明な場合はnull）"
@@ -90,7 +90,9 @@ const bloodTestRouter = router({
 - WBC（白血球数）の単位は特に注意：/μL（例:5800）、×10²/μL（例:58）、×10³/μL（例:5.8）など検査票により異なる
 - RBC（赤血球数）の単位は特に注意：×10⁴/μL（例:450）、×10⁶/μL（例:4.5）など検査票により異なる
 - 単位が画像に明記されていない場合は空文字列
-- 参考値・基準値欄の数値ではなく、患者の実測値のみを抽出すること`,
+- 参考値・基準値欄の数値ではなく、患者の実測値のみを抽出すること
+- 【最重要】検査が実施されていない項目（数値の記載がない、空欄、「-」「*」「未実施」などの場合）は value を必ず null にすること。0 を入れてはいけない
+- 検査票に項目名はあるが数値が空欄・ハイフン・アスタリスクの場合は value: null とすること`,
                 },
               ],
             },
@@ -109,7 +111,7 @@ const bloodTestRouter = router({
                       type: "object",
                       properties: {
                         item: { type: "string" },
-                        value: { type: "number" },
+                        value: { type: ["number", "null"] },
                         unit: { type: "string" },
                       },
                       required: ["item", "value", "unit"],
@@ -130,15 +132,21 @@ const bloodTestRouter = router({
         if (!ocrContent) throw new Error("OCR extraction failed");
 
         const extractedData = JSON.parse(ocrContent) as {
-          items: Array<{ item: string; value: number; unit: string }>;
+          items: Array<{ item: string; value: number | null; unit: string }>;
           testDate: string | null;
         };
 
-        // 4. 異常値スクリーニング（性別を考慮）
-        const screeningResults = screenAbnormalValues(extractedData.items, input.gender);
+        // 4. null値（未検査項目）を除外してスクリーニング対象のみ抓出
+        const validItems = extractedData.items.filter(
+          (item): item is { item: string; value: number; unit: string } =>
+            item.value !== null && item.value !== undefined && !isNaN(item.value)
+        );
+
+        // 5. 異常値スクリーニング（性別を考慮）
+        const screeningResults = screenAbnormalValues(validItems, input.gender);
         const abnormalValues = screeningResults.filter(r => r.status !== "normal");
 
-        // 5. LLMでアセスメントレポート生成
+        // 6. LLMでアセスメントレポート生成
         const genderLabel = input.gender === "male" ? "男性" : input.gender === "female" ? "女性" : "不明";
         const reportResponse = await invokeLLM({
           messages: [

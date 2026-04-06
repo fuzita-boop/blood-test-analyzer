@@ -70,3 +70,10 @@
 - [x] バックエンドAPI（analyze）に gender パラメータを追加
 - [x] アップロードUIに性別選択ボタンを追加（男性/女性/不明）
 - [x] テスト更新・全通過確認（66/66）
+
+## Phase 10: 未検査項目の0誤認識問題修正
+- [x] OCRプロンプトを修正（数値が記載されていない項目はnullを返すよう明示指示）
+- [x] JSONスキーマのvalue型をnumber | nullに変更
+- [x] screenAbnormalValuesでnull・undefined・NaNをスキップ
+- [x] routers.tsのOCR結果フィルタリングでnull値を除外
+- [x] テスト追加（71/71）・全通過確認・TypeScriptエラー0

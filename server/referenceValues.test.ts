@@ -446,3 +446,52 @@ describe("getAbnormalValues", () => {
     expect(results.map((r) => r.item)).toContain("K");
   });
 });
+
+// ── 未検査項目（null値）のスキップ ────────────────────────────────────────
+
+describe("未検査項目（null / undefined / NaN）のスキップ", () => {
+  it("value が null の項目はスクリーニング結果に含まれない", () => {
+    const results = screenAbnormalValues([
+      { item: "WBC", value: null as unknown as number, unit: "/μL" },
+      { item: "HbA1c", value: 7.5, unit: "%" },
+    ]);
+    expect(results).toHaveLength(1);
+    expect(results[0]?.item).toBe("HbA1c");
+  });
+
+  it("value が undefined の項目はスキップされる", () => {
+    const results = screenAbnormalValues([
+      { item: "ALT", value: undefined as unknown as number, unit: "U/L" },
+      { item: "AST", value: 25, unit: "U/L" },
+    ]);
+    expect(results).toHaveLength(1);
+    expect(results[0]?.item).toBe("AST");
+  });
+
+  it("全項目が null の場合は空配列を返す", () => {
+    const results = screenAbnormalValues([
+      { item: "WBC", value: null as unknown as number, unit: "/μL" },
+      { item: "RBC", value: null as unknown as number, unit: "×10⁴/μL" },
+      { item: "HbA1c", value: null as unknown as number, unit: "%" },
+    ]);
+    expect(results).toHaveLength(0);
+  });
+
+  it("null と正常値が混在する場合、正常値のみ結果に含まれ status は normal", () => {
+    const results = screenAbnormalValues([
+      { item: "WBC", value: null as unknown as number, unit: "/μL" },
+      { item: "GLU", value: 95, unit: "mg/dL" },
+    ]);
+    expect(results).toHaveLength(1);
+    expect(results[0]?.status).toBe("normal");
+  });
+
+  it("null と異常値が混在する場合、異常値のみ結果に含まれ status は high", () => {
+    const results = screenAbnormalValues([
+      { item: "LDL", value: null as unknown as number, unit: "mg/dL" },
+      { item: "GLU", value: 250, unit: "mg/dL" },
+    ]);
+    expect(results).toHaveLength(1);
+    expect(results[0]?.status).toBe("high");
+  });
+});

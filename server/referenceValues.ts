@@ -572,12 +572,16 @@ function getRefRange(ref: ReferenceRange, gender: Gender): { min?: number; max?:
  * @param gender 性別（"male" | "female" | "unknown"）
  */
 export function screenAbnormalValues(
-  extractedItems: Array<{ item: string; value: number; unit?: string }>,
+  extractedItems: Array<{ item: string; value: number | null | undefined; unit?: string }>,
   gender: Gender = "unknown"
 ): ScreeningResult[] {
   const results: ScreeningResult[] = [];
 
   for (const { item, value, unit } of extractedItems) {
+    // null / undefined / NaN は未検査項目 → スキップ
+    if (value === null || value === undefined || (typeof value === "number" && isNaN(value))) {
+      continue;
+    }
     const normalizedName = normalizeItemName(item);
     const ref = REFERENCE_VALUES[normalizedName] || REFERENCE_VALUES[item];
 
@@ -625,7 +629,7 @@ export function screenAbnormalValues(
  * 異常値のみを返す（status が normal 以外）
  */
 export function getAbnormalValues(
-  extractedItems: Array<{ item: string; value: number; unit?: string }>,
+  extractedItems: Array<{ item: string; value: number | null | undefined; unit?: string }>,
   gender: Gender = "unknown"
 ): ScreeningResult[] {
   return screenAbnormalValues(extractedItems, gender).filter(r => r.status !== "normal");
