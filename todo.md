@@ -92,6 +92,6 @@
 ## Phase 12: PWAアイコン軽量化
 - [x] 192px・512pxアイコンを1MB未満に圧縮（31KB・286KB）
 - [x] 静的ビルドとService Workerキャッシュを再検証
-- [ ] チェックポイントを保存
+- [x] チェックポイントを保存（d0026c39）
 - [x] Service WorkerのprecacheにHTML・JavaScript・CSS・manifest・PWAアイコン・OCR資産が含まれることを検証
 - [x] Service Workerのprecacheに生成済みJavaScript・CSSアセットが含まれることを明示検証
