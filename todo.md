@@ -102,4 +102,18 @@
 - [x] 再実行時のpnpmセットアップ失敗を修正（Node.jsを先にセットアップしpnpmキャッシュ指定を廃止）
 - [x] pnpmセットアップのバージョン重複を修正（package.jsonのpackageManager指定を使用）
 - [x] GitHub Pages標準のconfigure-pagesステップと自動サブパス取得を追加
-- [ ] GitHub PagesのSource設定・公開URLの有効化をユーザーに案内
+- [x] GitHub PagesのSource設定・公開URLの有効化をユーザーに案内
+- [x] GitHub Pages設定後に公開URLを実アクセスで確認（https://fuzita-boop.github.io/blood-test-analyzer/）
+
+## Phase 14: GitHub Pages利用制約の案内
+- [x] 非公開リポジトリのGitHub Pages利用制約と、公開・アップグレードの選択肢を案内
+
+## Phase 15: GitHubリポジトリ公開・Pages有効化
+- [x] ユーザー承認に基づきGitHubリポジトリを公開設定へ変更
+- [x] GitHub PagesをGitHub Actionsソースで有効化
+- [x] GitHub Pagesデプロイ成功と公開URLを確認
+
+## Phase 16: 画像破棄動作確認
+- [x] アップロード画像のIndexedDB非保存を確認
+- [x] OCR完了直後に画像をブラウザメモリから自動破棄
+- [x] OCR成功・失敗後に画像のFile/プレビュー参照が残らないことを検証（finallyでURL.revokeObjectURL・File/preview stateをクリア）

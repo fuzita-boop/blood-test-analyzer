@@ -28,6 +28,7 @@ export default function Upload() {
   const [gender, setGender] = useState<Gender>("unknown");
   const [items, setItems] = useState<ExtractedItem[]>([]);
   const [rawText, setRawText] = useState("");
+  const [wasOcr, setWasOcr] = useState(false);
   const [isReading, setIsReading] = useState(false);
   const [progressLabel, setProgressLabel] = useState("");
 
@@ -45,6 +46,7 @@ export default function Upload() {
     setPreview(URL.createObjectURL(file));
     setItems([]);
     setRawText("");
+    setWasOcr(false);
   }, [preview]);
 
   const runOcr = async () => {
@@ -57,13 +59,15 @@ export default function Upload() {
       });
       setRawText(result.rawText);
       setItems(result.items.length > 0 ? result.items : [EMPTY_ITEM]);
+      setWasOcr(true);
       await saveSettings({ version: 1, ocrLanguageReady: true });
-      toast.success(`${result.items.length}項目の候補を抽出しました。必ず画像と照合して修正してください。`);
+      toast.success(`${result.items.length}項目の候補を抽出し、画像をブラウザメモリから破棄しました。`);
     } catch (error) {
       console.error(error);
       toast.error("端末内OCRに失敗しました。数値を手入力してください。");
       setItems((current) => current.length ? current : [EMPTY_ITEM]);
     } finally {
+      discardImage();
       setIsReading(false);
       setProgressLabel("");
     }
@@ -97,10 +101,9 @@ export default function Upload() {
       extractedItems: validItems,
       screeningResults,
       report,
-      source: selectedFile ? "local-ocr" as const : "manual" as const,
+      source: wasOcr ? "local-ocr" as const : "manual" as const,
     };
     await saveRecord(record);
-    discardImage();
     setRawText("");
     toast.success("端末内に解析結果を保存しました。画像は保存されていません。");
     navigate(`/report/${record.id}`);
