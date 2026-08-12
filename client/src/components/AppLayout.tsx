@@ -29,8 +29,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="min-h-screen flex bg-background">
-      <aside className="hidden lg:flex flex-col w-60 bg-sidebar text-sidebar-foreground shrink-0">
+    <div className="h-[100dvh] min-h-[100svh] flex overflow-hidden bg-background">
+      <aside className="hidden lg:flex h-full flex-col w-60 bg-sidebar text-sidebar-foreground shrink-0">
         <div className="flex items-center gap-3 px-6 py-5 border-b border-sidebar-border">
           <div className="w-8 h-8 rounded-lg bg-sidebar-primary/20 flex items-center justify-center">
             <FlaskConical className="w-4 h-4 text-sidebar-primary" />
@@ -52,7 +52,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <button aria-label="メニューを閉じる" className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
-          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-sidebar text-sidebar-foreground flex flex-col">
+          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-sidebar text-sidebar-foreground flex flex-col pt-[env(safe-area-inset-top)]">
             <div className="flex items-center justify-between px-6 py-5 border-b border-sidebar-border">
               <div className="flex items-center gap-3"><FlaskConical className="w-5 h-5 text-sidebar-primary" /><span className="text-sm font-semibold">採血データ解析</span></div>
               <button aria-label="メニューを閉じる" onClick={() => setMobileOpen(false)}><X className="w-5 h-5 text-sidebar-foreground/60" /></button>
@@ -62,13 +62,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="lg:hidden flex items-center justify-between px-4 py-3 border-b border-border bg-card">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
+        <header className="lg:hidden z-40 shrink-0 flex items-center justify-between px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] border-b border-border bg-card/95 backdrop-blur">
           <button aria-label="メニューを開く" onClick={() => setMobileOpen(true)}><Menu className="w-5 h-5 text-foreground" /></button>
           <div className="flex items-center gap-2"><FlaskConical className="w-4 h-4 text-primary" /><span className="text-sm font-semibold">採血データ解析</span></div>
           <ShieldCheck className="w-5 h-5 text-emerald-600" />
         </header>
-        <main className="flex-1 overflow-auto">{children}</main>
+        <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain">{children}</main>
       </div>
     </div>
   );
