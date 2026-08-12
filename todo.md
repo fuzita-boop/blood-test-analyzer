@@ -101,4 +101,5 @@
 - [x] Deploy Pagesワークフロー失敗の原因を特定（pnpmキャッシュ指定より前にpnpmが未セットアップ）・順序を修正
 - [x] 再実行時のpnpmセットアップ失敗を修正（Node.jsを先にセットアップしpnpmキャッシュ指定を廃止）
 - [x] pnpmセットアップのバージョン重複を修正（package.jsonのpackageManager指定を使用）
+- [x] GitHub Pages標準のconfigure-pagesステップと自動サブパス取得を追加
 - [ ] GitHub PagesのSource設定・公開URLの有効化をユーザーに案内
