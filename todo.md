@@ -99,4 +99,5 @@
 ## Phase 13: GitHub Pages公開状態確認
 - [x] GitHub Pages設定・Actions実行状況を確認（Pages APIは権限不足で参照不可、最新2回のDeploy Pagesワークフローは失敗）
 - [x] Deploy Pagesワークフロー失敗の原因を特定（pnpmキャッシュ指定より前にpnpmが未セットアップ）・順序を修正
+- [x] 再実行時のpnpmセットアップ失敗を修正（Node.jsを先にセットアップしpnpmキャッシュ指定を廃止）
 - [ ] GitHub PagesのSource設定・公開URLの有効化をユーザーに案内
