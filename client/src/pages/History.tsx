@@ -1,183 +1,77 @@
 import AppLayout from "@/components/AppLayout";
-import { trpc } from "@/lib/trpc";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { clearRecords, deleteRecord, exportLocalData, getRecords, importLocalData } from "@/lib/localStorage";
+import type { LocalBloodTestRecord } from "@/lib/localTypes";
+import { AlertTriangle, Download, FileText, FolderOpen, Search, Trash2, Upload, UploadCloud } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Link } from "wouter";
-import { format } from "date-fns";
-import { ja } from "date-fns/locale";
-import {
-  FileText,
-  Upload,
-  Search,
-  ArrowRight,
-  Loader2,
-  CheckCircle,
-  Clock,
-  AlertCircle,
-} from "lucide-react";
-import { useState } from "react";
 
-function StatusBadge({ status }: { status: string }) {
-  const config: Record<string, { label: string; className: string; icon: React.ReactNode }> = {
-    completed: {
-      label: "完了",
-      className: "bg-emerald-50 text-emerald-700 border-emerald-200",
-      icon: <CheckCircle className="w-3 h-3" />,
-    },
-    processing: {
-      label: "処理中",
-      className: "bg-blue-50 text-blue-700 border-blue-200",
-      icon: <Loader2 className="w-3 h-3 animate-spin" />,
-    },
-    error: {
-      label: "エラー",
-      className: "bg-red-50 text-red-700 border-red-200",
-      icon: <AlertCircle className="w-3 h-3" />,
-    },
-    uploading: {
-      label: "アップロード中",
-      className: "bg-amber-50 text-amber-700 border-amber-200",
-      icon: <Clock className="w-3 h-3" />,
-    },
-  };
-  const c = config[status] ?? { label: status, className: "", icon: null };
-  return (
-    <Badge variant="outline" className={`text-xs gap-1 ${c.className}`}>
-      {c.icon}
-      {c.label}
-    </Badge>
-  );
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("ja-JP", { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
 }
 
 export default function History() {
-  const [search, setSearch] = useState("");
-  const { data: records, isLoading } = trpc.bloodTest.list.useQuery({ patientId: undefined });
+  const [records, setRecords] = useState<LocalBloodTestRecord[]>([]);
+  const [query, setQuery] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const filtered = records?.filter((r) => {
-    if (!search) return true;
-    return String(r.id).includes(search);
-  }) ?? [];
+  const refresh = () => getRecords().then(setRecords);
+  useEffect(() => { refresh(); }, []);
+  const filtered = records.filter((record) => `${record.testDate ?? ""} ${record.report.recordSummary}`.toLowerCase().includes(query.toLowerCase()));
+
+  const downloadBackup = async () => {
+    const backup = await exportLocalData();
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `採血解析バックアップ-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    toast.success(`${backup.records.length}件の端末内データをバックアップしました`);
+  };
+
+  const uploadBackup = async (file: File) => {
+    try {
+      const data = JSON.parse(await file.text());
+      const count = await importLocalData(data);
+      await refresh();
+      toast.success(`${count}件の履歴を端末内に取り込みました`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "バックアップの読み込みに失敗しました");
+    }
+  };
+
+  const remove = async (id: string) => {
+    if (!window.confirm("この解析履歴を端末内から削除しますか？この操作は取り消せません。")) return;
+    await deleteRecord(id);
+    await refresh();
+    toast.success("端末内の解析履歴を削除しました");
+  };
+
+  const clearAll = async () => {
+    if (!window.confirm("端末内の解析履歴をすべて削除しますか？必要であれば先にJSONバックアップを保存してください。")) return;
+    await clearRecords();
+    await refresh();
+    toast.success("端末内の解析履歴をすべて削除しました");
+  };
 
   return (
     <AppLayout>
-      <div className="p-6 lg:p-8 max-w-4xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-foreground tracking-tight">解析履歴</h1>
-            <p className="text-muted-foreground text-sm mt-1">過去の採血データ解析結果を確認できます</p>
-          </div>
-          <Link href="/upload">
-            <Button size="sm" className="gap-2">
-              <Upload className="w-3.5 h-3.5" />
-              新規解析
-            </Button>
-          </Link>
+      <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div><p className="text-xs font-medium text-primary tracking-wide">ON-DEVICE HISTORY</p><h1 className="text-2xl font-semibold tracking-tight mt-1">端末内の解析履歴</h1><p className="text-sm text-muted-foreground mt-1">保存先はこのブラウザのIndexedDBです。別の端末・ブラウザからは閲覧できません。</p></div>
+          <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" className="gap-1.5" onClick={downloadBackup}><Download className="w-3.5 h-3.5" />JSONバックアップ</Button><Button variant="outline" size="sm" className="gap-1.5" onClick={() => fileRef.current?.click()}><UploadCloud className="w-3.5 h-3.5" />復元</Button><input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadBackup(file); event.target.value = ""; }} /></div>
         </div>
-
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="解析IDで検索..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-9 text-sm"
-          />
-        </div>
-
-        {/* Records */}
-        {isLoading ? (
-          <div className="space-y-3">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-20 bg-muted rounded-xl animate-pulse" />
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-              <FileText className="w-6 h-6 text-muted-foreground" />
-            </div>
-            <p className="text-muted-foreground font-medium">
-              {search ? "検索結果がありません" : "解析履歴がありません"}
-            </p>
-            {!search && (
-              <Link href="/upload">
-                <Button variant="outline" size="sm" className="mt-4 gap-2">
-                  <Upload className="w-3.5 h-3.5" />
-                  最初の解析を開始
-                </Button>
-              </Link>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {filtered.map((record) => {
-              const extractedData = record.extractedData as { items?: unknown[] } | null;
-              const itemCount = extractedData?.items?.length ?? 0;
-
-              return (
-                <Card key={record.id} className="border-border shadow-none hover:border-primary/30 transition-colors">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-4">
-                      {/* Icon */}
-                      <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center shrink-0 border border-border">
-                        <FileText className="w-5 h-5 text-muted-foreground" />
-                      </div>
-
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-medium text-foreground">
-                            解析 #{record.id}
-                          </span>
-                          <StatusBadge status={record.status} />
-                        </div>
-                        <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                          <span className="text-xs text-muted-foreground">
-                            {format(new Date(record.createdAt), "yyyy年M月d日 HH:mm", { locale: ja })}
-                          </span>
-                          {record.testDate && (
-                            <span className="text-xs text-muted-foreground">
-                              採血日: {format(new Date(record.testDate), "yyyy年M月d日", { locale: ja })}
-                            </span>
-                          )}
-                          {itemCount > 0 && (
-                            <span className="text-xs text-muted-foreground">
-                              {itemCount}項目抽出
-                            </span>
-                          )}
-                        </div>
-                        {record.errorMessage && (
-                          <p className="text-xs text-red-600 mt-1 truncate">{record.errorMessage}</p>
-                        )}
-                      </div>
-
-                      {/* Action */}
-                      {record.status === "completed" && (
-                        <Link href={`/report/${record.id}`}>
-                          <Button variant="outline" size="sm" className="gap-1.5 text-xs shrink-0">
-                            レポート
-                            <ArrowRight className="w-3 h-3" />
-                          </Button>
-                        </Link>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Count */}
-        {filtered.length > 0 && (
-          <p className="text-xs text-muted-foreground text-center">
-            {filtered.length}件の解析記録
-          </p>
-        )}
+        <div className="flex items-start gap-3 p-4 rounded-lg bg-blue-50 border border-blue-200"><FolderOpen className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" /><p className="text-xs text-blue-700 leading-relaxed">ブラウザのキャッシュ・サイトデータを消去すると履歴も削除されます。端末の変更やブラウザの初期化前に、必ずJSONバックアップを保存してください。バックアップには画像は含まれません。</p></div>
+        <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="採血日・記録内容で検索" className="w-full h-10 pl-9 pr-3 rounded-lg border border-input bg-background text-sm" /></div>
+        <Card className="border-border shadow-none"><CardHeader className="pb-3"><div className="flex items-center justify-between"><CardTitle className="text-base">解析履歴</CardTitle><span className="text-xs text-muted-foreground">{filtered.length}件</span></div></CardHeader><CardContent className="pt-0">
+          {filtered.length === 0 ? <div className="text-center py-12"><FileText className="w-6 h-6 text-muted-foreground mx-auto mb-3" /><p className="text-sm text-muted-foreground">{records.length ? "条件に一致する履歴がありません" : "端末内の解析履歴がありません"}</p>{!records.length && <Link href="/upload"><Button variant="outline" size="sm" className="mt-4 gap-1.5"><Upload className="w-3.5 h-3.5" />最初の解析を開始</Button></Link>}</div> : <div className="divide-y divide-border">{filtered.map((record) => <div key={record.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center"><span className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0"><FileText className="w-4 h-4 text-muted-foreground" /></span><div className="flex-1 min-w-0"><p className="text-sm font-medium">採血解析 {record.testDate ? `（採血日：${record.testDate}）` : ""}</p><p className="text-xs text-muted-foreground mt-1">保存日時：{formatDate(record.createdAt)}・測定値 {record.extractedItems.filter((item) => item.value !== null).length}項目・性別：{record.gender === "male" ? "男性" : record.gender === "female" ? "女性" : "不明"}</p></div>{record.report.abnormalSummary.length > 0 ? <Badge variant="outline" className="w-fit bg-amber-50 text-amber-700 border-amber-200">要確認 {record.report.abnormalSummary.length}</Badge> : <Badge variant="outline" className="w-fit bg-emerald-50 text-emerald-700 border-emerald-200">基準値内</Badge>}<div className="flex gap-1"><Link href={`/report/${record.id}`}><Button variant="outline" size="sm">レポート</Button></Link><Button aria-label="削除" variant="ghost" size="icon" onClick={() => remove(record.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button></div></div>)}</div>}
+        </CardContent></Card>
+        {records.length > 0 && <div className="flex justify-end"><Button variant="ghost" size="sm" onClick={clearAll} className="gap-1.5 text-muted-foreground hover:text-destructive"><AlertTriangle className="w-3.5 h-3.5" />端末内の履歴をすべて削除</Button></div>}
       </div>
     </AppLayout>
   );

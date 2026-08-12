@@ -1,187 +1,95 @@
-import { jsxLocPlugin } from "@builder.io/vite-plugin-jsx-loc";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
-import { defineConfig, type Plugin, type ViteDevServer } from "vite";
-import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
-
-// =============================================================================
-// Manus Debug Collector - Vite Plugin
-// Writes browser logs directly to files, trimmed when exceeding size limit
-// =============================================================================
+import { defineConfig, type Plugin } from "vite";
+import { VitePWA } from "vite-plugin-pwa";
 
 const PROJECT_ROOT = import.meta.dirname;
-const LOG_DIR = path.join(PROJECT_ROOT, ".manus-logs");
-const MAX_LOG_SIZE_BYTES = 1 * 1024 * 1024; // 1MB per log file
-const TRIM_TARGET_BYTES = Math.floor(MAX_LOG_SIZE_BYTES * 0.6); // Trim to 60% to avoid constant re-trimming
+const require = createRequire(import.meta.url);
+const tesseractCoreRoot = path.dirname(require.resolve("tesseract.js-core/package.json"));
+const repositoryName = process.env.GITHUB_REPOSITORY?.split("/")[1];
+const base = process.env.VITE_BASE_PATH || (process.env.GITHUB_ACTIONS && repositoryName ? `/${repositoryName}/` : "/");
 
-type LogSource = "browserConsole" | "networkRequests" | "sessionReplay";
+const ocrAssets: Record<string, string> = {
+  "ocr/worker.min.js": path.join(PROJECT_ROOT, "node_modules/tesseract.js/dist/worker.min.js"),
+  "ocr/tesseract-core-simd-lstm.wasm.js": path.join(tesseractCoreRoot, "tesseract-core-simd-lstm.wasm.js"),
+  "ocr/tesseract-core-simd-lstm.wasm": path.join(tesseractCoreRoot, "tesseract-core-simd-lstm.wasm"),
+  "tessdata/jpn.traineddata.gz": path.join(PROJECT_ROOT, "node_modules/@tesseract.js-data/jpn/4.0.0/jpn.traineddata.gz"),
+  "tessdata/eng.traineddata.gz": path.join(PROJECT_ROOT, "node_modules/@tesseract.js-data/eng/4.0.0/eng.traineddata.gz"),
+};
 
-function ensureLogDir() {
-  if (!fs.existsSync(LOG_DIR)) {
-    fs.mkdirSync(LOG_DIR, { recursive: true });
-  }
-}
-
-function trimLogFile(logPath: string, maxSize: number) {
-  try {
-    if (!fs.existsSync(logPath) || fs.statSync(logPath).size <= maxSize) {
-      return;
-    }
-
-    const lines = fs.readFileSync(logPath, "utf-8").split("\n");
-    const keptLines: string[] = [];
-    let keptBytes = 0;
-
-    // Keep newest lines (from end) that fit within 60% of maxSize
-    const targetSize = TRIM_TARGET_BYTES;
-    for (let i = lines.length - 1; i >= 0; i--) {
-      const lineBytes = Buffer.byteLength(`${lines[i]}\n`, "utf-8");
-      if (keptBytes + lineBytes > targetSize) break;
-      keptLines.unshift(lines[i]);
-      keptBytes += lineBytes;
-    }
-
-    fs.writeFileSync(logPath, keptLines.join("\n"), "utf-8");
-  } catch {
-    /* ignore trim errors */
-  }
-}
-
-function writeToLogFile(source: LogSource, entries: unknown[]) {
-  if (entries.length === 0) return;
-
-  ensureLogDir();
-  const logPath = path.join(LOG_DIR, `${source}.log`);
-
-  // Format entries with timestamps
-  const lines = entries.map((entry) => {
-    const ts = new Date().toISOString();
-    return `[${ts}] ${JSON.stringify(entry)}`;
-  });
-
-  // Append to log file
-  fs.appendFileSync(logPath, `${lines.join("\n")}\n`, "utf-8");
-
-  // Trim if exceeds max size
-  trimLogFile(logPath, MAX_LOG_SIZE_BYTES);
-}
-
-/**
- * Vite plugin to collect browser debug logs
- * - POST /__manus__/logs: Browser sends logs, written directly to files
- * - Files: browserConsole.log, networkRequests.log, sessionReplay.log
- * - Auto-trimmed when exceeding 1MB (keeps newest entries)
- */
-function vitePluginManusDebugCollector(): Plugin {
+function localOcrAssets(): Plugin {
   return {
-    name: "manus-debug-collector",
-
-    transformIndexHtml(html) {
-      if (process.env.NODE_ENV === "production") {
-        return html;
-      }
-      return {
-        html,
-        tags: [
-          {
-            tag: "script",
-            attrs: {
-              src: "/__manus__/debug-collector.js",
-              defer: true,
-            },
-            injectTo: "head",
-          },
-        ],
-      };
-    },
-
-    configureServer(server: ViteDevServer) {
-      // POST /__manus__/logs: Browser sends logs (written directly to files)
-      server.middlewares.use("/__manus__/logs", (req, res, next) => {
-        if (req.method !== "POST") {
-          return next();
-        }
-
-        const handlePayload = (payload: any) => {
-          // Write logs directly to files
-          if (payload.consoleLogs?.length > 0) {
-            writeToLogFile("browserConsole", payload.consoleLogs);
-          }
-          if (payload.networkRequests?.length > 0) {
-            writeToLogFile("networkRequests", payload.networkRequests);
-          }
-          if (payload.sessionEvents?.length > 0) {
-            writeToLogFile("sessionReplay", payload.sessionEvents);
-          }
-
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ success: true }));
-        };
-
-        const reqBody = (req as { body?: unknown }).body;
-        if (reqBody && typeof reqBody === "object") {
-          try {
-            handlePayload(reqBody);
-          } catch (e) {
-            res.writeHead(400, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ success: false, error: String(e) }));
-          }
+    name: "local-ocr-assets",
+    configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        const pathname = request.url?.split("?")[0]?.replace(/^\//, "") ?? "";
+        const assetPath = ocrAssets[pathname];
+        if (!assetPath) return next();
+        if (!fs.existsSync(assetPath)) {
+          response.statusCode = 404;
+          response.end();
           return;
         }
-
-        let body = "";
-        req.on("data", (chunk) => {
-          body += chunk.toString();
-        });
-
-        req.on("end", () => {
-          try {
-            const payload = JSON.parse(body);
-            handlePayload(payload);
-          } catch (e) {
-            res.writeHead(400, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ success: false, error: String(e) }));
-          }
-        });
+        response.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        response.setHeader("Content-Type", pathname.endsWith(".js") ? "application/javascript" : "application/octet-stream");
+        fs.createReadStream(assetPath).pipe(response);
+      });
+    },
+    generateBundle() {
+      Object.entries(ocrAssets).forEach(([fileName, assetPath]) => {
+        this.emitFile({ type: "asset", fileName, source: fs.readFileSync(assetPath) });
       });
     },
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector()];
-
 export default defineConfig({
-  plugins,
+  base,
+  plugins: [
+    react(),
+    tailwindcss(),
+    localOcrAssets(),
+    VitePWA({
+      registerType: "autoUpdate",
+      injectRegister: false,
+      includeAssets: ["icons/icon-192.png", "icons/icon-512.png"],
+      manifest: {
+        name: "採血データ解析アシスタント",
+        short_name: "採血解析",
+        description: "端末内だけで動作する採血データ解析アシスタント",
+        start_url: base,
+        scope: base,
+        display: "standalone",
+        background_color: "#1e2a3a",
+        theme_color: "#1e2a3a",
+        icons: [
+          { src: "icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
+          { src: "icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
+        ],
+      },
+      workbox: {
+        globPatterns: ["**/*.{html,js,css,png,webmanifest,wasm,gz}"],
+        navigateFallback: `${base}index.html`,
+        cleanupOutdatedCaches: true,
+        maximumFileSizeToCacheInBytes: 40 * 1024 * 1024,
+      },
+    }),
+  ],
   resolve: {
     alias: {
-      "@": path.resolve(import.meta.dirname, "client", "src"),
-      "@shared": path.resolve(import.meta.dirname, "shared"),
-      "@assets": path.resolve(import.meta.dirname, "attached_assets"),
+      "@": path.resolve(PROJECT_ROOT, "client", "src"),
+      "@shared": path.resolve(PROJECT_ROOT, "shared"),
     },
   },
-  envDir: path.resolve(import.meta.dirname),
-  root: path.resolve(import.meta.dirname, "client"),
-  publicDir: path.resolve(import.meta.dirname, "client", "public"),
+  root: path.resolve(PROJECT_ROOT, "client"),
+  publicDir: path.resolve(PROJECT_ROOT, "client", "public"),
   build: {
-    outDir: path.resolve(import.meta.dirname, "dist/public"),
+    outDir: path.resolve(PROJECT_ROOT, "dist"),
     emptyOutDir: true,
+    sourcemap: false,
   },
-  server: {
-    host: true,
-    allowedHosts: [
-      ".manuspre.computer",
-      ".manus.computer",
-      ".manus-asia.computer",
-      ".manuscomputer.ai",
-      ".manusvm.computer",
-      "localhost",
-      "127.0.0.1",
-    ],
-    fs: {
-      strict: true,
-      deny: ["**/.*"],
-    },
-  },
+  server: { host: true, allowedHosts: [".manus.computer", ".manus-asia.computer", "localhost", "127.0.0.1"] },
 });

@@ -30,7 +30,7 @@
 ## Phase 4: テスト・最終調整
 - [x] 動作確認（TypeScriptエラー0）
 - [x] テスト全通過（11/11）
-- [ ] チェックポイント保存
+- [x] チェックポイント保存（初回リリース時に実施）
 
 ## Phase 5: プライバシー強化対応
 - [x] アップロード画像をOCR読み取り後にS3から自動削除
@@ -77,3 +77,21 @@
 - [x] screenAbnormalValuesでnull・undefined・NaNをスキップ
 - [x] routers.tsのOCR結果フィルタリングでnull値を除外
 - [x] テスト追加（71/71）・全通過確認・TypeScriptエラー0
+
+## Phase 11: 完全ローカルPWA・GitHub Pages移行
+- [x] 既存クラウドDBの保存件数・移行可否を監査（採血記録17件・レポート17件。ユーザー指定により履歴は移行せず新規開始）
+- [x] ログイン・tRPC・Express・クラウドDB・S3・外部LLMへの必須依存を削除
+- [x] IndexedDBに採血記録・レポート・設定を保存するクライアント側ストレージを実装
+- [x] 画像を端末内でOCRし、検査値抽出・未検査項目の除外・異常値スクリーニングをオフライン実行（キャッシュ済み資産利用時）
+- [x] ローカル履歴のJSONエクスポート・インポート機能を実装
+- [x] Service Worker・Web App Manifest・OCR資産を含むアセットの事前キャッシュを実装
+- [x] GitHub Pagesのサブパスに対応するビルド設定を実装
+- [x] GitHub ActionsによるGitHub Pages自動デプロイを追加
+- [x] 静的ビルド・基準値判定・Service Worker/OCR資産出力をテスト（3/3・TypeScriptエラー0）
+
+## Phase 12: PWAアイコン軽量化
+- [x] 192px・512pxアイコンを1MB未満に圧縮（31KB・286KB）
+- [x] 静的ビルドとService Workerキャッシュを再検証
+- [ ] チェックポイントを保存
+- [x] Service WorkerのprecacheにHTML・JavaScript・CSS・manifest・PWAアイコン・OCR資産が含まれることを検証
+- [x] Service Workerのprecacheに生成済みJavaScript・CSSアセットが含まれることを明示検証

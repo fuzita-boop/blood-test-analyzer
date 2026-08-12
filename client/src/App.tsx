@@ -1,39 +1,38 @@
-import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/sonner";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Router, Switch } from "wouter";
+import { useHashLocation } from "wouter/use-hash-location";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import Home from "./pages/Home";
-import Upload from "./pages/Upload";
-import Report from "./pages/Report";
 import History from "./pages/History";
+import Home from "./pages/Home";
+import Report from "./pages/Report";
+import Upload from "./pages/Upload";
 
-
-function Router() {
+function Routes() {
   return (
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/upload" component={Upload} />
       <Route path="/report/:id" component={Report} />
       <Route path="/history" component={History} />
-      <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
   );
 }
 
-function App() {
+export default function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
         <TooltipProvider>
+          <Router hook={useHashLocation}>
+            <Routes />
+          </Router>
           <Toaster />
-          <Router />
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );
 }
-
-export default App;
