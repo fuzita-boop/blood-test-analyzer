@@ -74,6 +74,8 @@ export default defineConfig({
         globPatterns: ["**/*.{html,js,css,png,webmanifest,wasm,gz}"],
         navigateFallback: `${base}index.html`,
         cleanupOutdatedCaches: true,
+        skipWaiting: true,
+        clientsClaim: true,
         maximumFileSizeToCacheInBytes: 40 * 1024 * 1024,
       },
     }),
