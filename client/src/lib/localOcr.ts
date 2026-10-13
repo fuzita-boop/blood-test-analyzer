@@ -44,36 +44,96 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function normalizeLine(value: string) {
+  return value
+    .normalize("NFKC")
+    .replace(/[‐‑–—―ー]/g, "-")
+    .replace(/[，、]/g, ",")
+    .replace(/[．。]/g, ".")
+    .trim();
+}
+
 function normalizeNumber(value: string) {
-  const normalized = value.replace(/,/g, "").replace(/O/g, "0").replace(/[Il]/g, "1");
+  const normalized = value
+    .normalize("NFKC")
+    .replace(/,/g, "")
+    .replace(/[Oo]/g, "0")
+    .replace(/[Il]/g, "1");
   const parsed = Number.parseFloat(normalized);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function detectUnit(line: string, fallback: string) {
-  const unitMatch = line.match(/(×\s*10[²³⁴⁶]|x\s*10[2346]|\/?μ?[lL]|U\/?L|mg\/?dL|mg\/?L|g\/?dL|mEq\/?L|mmol\/?L|%|pg|fL|mL\/min\/1\.73m²)/i);
-  return unitMatch?.[0]?.replace(/\s+/g, "") ?? fallback;
+function matchesAlias(line: string, alias: string) {
+  const normalizedAlias = normalizeLine(alias);
+  // 英数字だけの短い略称は単語境界を要求する（例: Hb が HbA1c に一致しないようにする）。
+  if (/^[A-Za-z0-9]+$/.test(normalizedAlias)) {
+    return new RegExp(`(?:^|[^A-Za-z0-9])${escapeRegExp(normalizedAlias)}(?![A-Za-z0-9])`, "i").test(line);
+  }
+  return line.toLowerCase().includes(normalizedAlias.toLowerCase());
 }
 
+function detectUnit(text: string, fallback: string) {
+  const unitMatch = text.match(/((?:×|x)\s*10(?:[²³⁴⁶]|\^?[2346])\s*\/?\s*μ?[lL]|U\/?L|mg\/?dL|mg\/?L|g\/?dL|mEq\/?L|mmol\/?L|mL\/?min\/?1\.73m2|\/?μ[lL]|%|pg|fL)/i);
+  const detected = unitMatch?.[0]?.replace(/\s+/g, "");
+  if (!detected) return fallback;
+  return detected
+    .replace(/[xX]/, "×")
+    .replace(/10\^?2/g, "10²")
+    .replace(/10\^?3/g, "10³")
+    .replace(/10\^?4/g, "10⁴")
+    .replace(/10\^?6/g, "10⁶");
+}
+
+function isReferenceRange(text: string) {
+  return /\d[\d,.]*\s*(?:~|〜|\-|–|to)\s*\d[\d,.]*/i.test(text);
+}
+
+function getValueNearLabel(lines: string[], lineIndex: number, alias: string) {
+  const labelLine = lines[lineIndex] ?? "";
+  const afterLabel = labelLine.replace(new RegExp(`.*?${escapeRegExp(alias)}`, "i"), "");
+  const sameLineValue = afterLabel.match(/[-+]?\d[\d,.]*/)?.[0];
+  if (sameLineValue && !isReferenceRange(afterLabel)) {
+    return { value: normalizeNumber(sameLineValue), context: lines.slice(lineIndex, lineIndex + 3).join(" ") };
+  }
+
+  // 検査票の列レイアウトでは「項目名」「数値」「単位」が別々の行としてOCRされる場合がある。
+  // 直後2行だけを候補にし、基準値の範囲表記は実測値として扱わない。
+  for (let offset = 1; offset <= 2; offset += 1) {
+    const nextLine = lines[lineIndex + offset];
+    if (!nextLine || isReferenceRange(nextLine) || /^(?:基準値|参考値|単位|項目|結果)$/i.test(nextLine)) continue;
+    const numericValue = nextLine.match(/^\s*([-+]?\d[\d,.]*)\s*(?:$|[^\d])/ )?.[1];
+    if (numericValue) {
+      return { value: normalizeNumber(numericValue), context: lines.slice(lineIndex, lineIndex + 4).join(" ") };
+    }
+  }
+
+  return { value: null, context: lines.slice(lineIndex, lineIndex + 3).join(" ") };
+}
+
+/**
+ * OCR本文から、検査項目の直後にある実測値を候補として抽出する。
+ * 同一行だけでなく、表の列が分割されたOCR結果（項目名→数値→単位）にも対応する。
+ * 数値のない項目・基準範囲だけの行は未検査（null）として残し、解析対象にはしない。
+ */
 export function parseBloodTestText(rawText: string): ExtractedItem[] {
   const lines = rawText
     .replace(/\r/g, "")
     .split("\n")
-    .map((line) => line.trim())
+    .map(normalizeLine)
     .filter(Boolean);
 
   const extracted: ExtractedItem[] = [];
   for (const candidate of OCR_CANDIDATES) {
-    const match = lines.find((line) => candidate.aliases.some((alias) => line.toLowerCase().includes(alias.toLowerCase())));
-    if (!match) continue;
-    const alias = candidate.aliases.find((value) => match.toLowerCase().includes(value.toLowerCase())) ?? candidate.canonical;
-    const afterLabel = match.replace(new RegExp(`.*?${escapeRegExp(alias)}`, "i"), "");
-    const numericMatch = afterLabel.match(/[-+]?\d[\d,.]*/);
-    const value = numericMatch ? normalizeNumber(numericMatch[0]) : null;
+    const lineIndex = lines.findIndex((line) => candidate.aliases.some((alias) => matchesAlias(line, alias)));
+    if (lineIndex < 0) continue;
+
+    const match = lines[lineIndex];
+    const alias = candidate.aliases.find((value) => matchesAlias(match, value)) ?? candidate.canonical;
+    const { value, context } = getValueNearLabel(lines, lineIndex, normalizeLine(alias));
     extracted.push({
       item: candidate.canonical,
       value,
-      unit: detectUnit(afterLabel, candidate.defaultUnit),
+      unit: detectUnit(context, candidate.defaultUnit),
     });
   }
   return extracted;

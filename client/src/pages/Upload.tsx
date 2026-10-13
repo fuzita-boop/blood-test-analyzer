@@ -18,6 +18,10 @@ function createId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function getValidItems(items: ExtractedItem[]) {
+  return items.filter((item) => item.item.trim() && typeof item.value === "number" && Number.isFinite(item.value));
+}
+
 export default function Upload() {
   const [, navigate] = useLocation();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -61,10 +65,15 @@ export default function Upload() {
       setItems(result.items.length > 0 ? result.items : [EMPTY_ITEM]);
       setWasOcr(true);
       await saveSettings({ version: 1, ocrLanguageReady: true });
-      toast.success(`${result.items.length}項目の候補を抽出し、画像をブラウザメモリから破棄しました。`);
+      const validCount = getValidItems(result.items).length;
+      if (validCount > 0) {
+        toast.success(`${validCount}項目の数値を抽出しました。手入力せず、このままレポートを作成できます。`);
+      } else {
+        toast.warning("OCRテキストは取得できましたが、検査項目と数値の組み合わせを抽出できませんでした。OCRテキストを確認して候補へ反映するか、画像を鮮明にして再読み取りしてください。");
+      }
     } catch (error) {
       console.error(error);
-      toast.error("端末内OCRに失敗しました。数値を手入力してください。");
+      toast.error("端末内OCRに失敗しました。画像を鮮明にして再読み取りしてください。");
       setItems((current) => current.length ? current : [EMPTY_ITEM]);
     } finally {
       discardImage();
@@ -88,9 +97,20 @@ export default function Upload() {
   };
 
   const saveAnalysis = async () => {
-    const validItems = items.filter((item) => item.item.trim() && typeof item.value === "number" && Number.isFinite(item.value));
-    if (validItems.length === 0) return toast.error("少なくとも1つの検査項目名と数値を入力してください");
-    const screeningResults = runScreening(validItems, gender);
+    // 画面の表に反映できなかった場合でも、取得済みのOCR本文から再抽出して保存する。
+    // これにより、OCR成功後に検査値を手入力しなくてもレポートを作成できる。
+    const validItems = getValidItems(items);
+    const ocrFallbackItems = validItems.length === 0 && rawText.trim() ? getValidItems(parseBloodTestText(rawText)) : [];
+    const itemsForAnalysis = validItems.length > 0 ? validItems : ocrFallbackItems;
+
+    if (itemsForAnalysis.length === 0) {
+      return toast.error("OCRから検査項目と数値を検出できませんでした。画像を鮮明にして再読み取りするか、OCRテキストの候補を確認してください。");
+    }
+    if (validItems.length === 0 && ocrFallbackItems.length > 0) {
+      setItems(ocrFallbackItems);
+      toast.message("OCRテキストから検査値を再抽出してレポートを作成します。");
+    }
+    const screeningResults = runScreening(itemsForAnalysis, gender);
     const report = buildAssessmentReport(screeningResults);
     const record = {
       id: createId(),
@@ -98,7 +118,7 @@ export default function Upload() {
       updatedAt: new Date().toISOString(),
       testDate: testDate || undefined,
       gender,
-      extractedItems: validItems,
+      extractedItems: itemsForAnalysis,
       screeningResults,
       report,
       source: wasOcr ? "local-ocr" as const : "manual" as const,
@@ -122,12 +142,12 @@ export default function Upload() {
 
         <Card className="border-border shadow-none"><CardContent className="p-6 space-y-5"><h2 className="text-sm font-semibold">判定設定</h2><div className="space-y-2"><Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5"><User className="w-3.5 h-3.5" />性別（男女別基準値に使用）</Label><div className="flex flex-wrap gap-2">{([ ["male", "男性"], ["female", "女性"], ["unknown", "不明"] ] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setGender(value)} className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all ${gender === value ? "bg-primary text-primary-foreground border-primary" : "bg-background text-muted-foreground border-border hover:border-primary/50"}`}>{label}</button>)}</div><p className="text-xs text-muted-foreground">RBC・Hb・Ht・尿酸・γ-GTPなどは性別により基準値が異なります。</p></div><div className="space-y-2"><Label htmlFor="test-date" className="text-xs font-medium text-muted-foreground">採血日（任意）</Label><Input id="test-date" type="date" value={testDate} onChange={(event) => setTestDate(event.target.value)} className="h-9 text-sm max-w-xs" /></div></CardContent></Card>
 
-        {(isReading || items.length > 0) && <Card className="border-border shadow-none"><CardContent className="p-6 space-y-4"><div className="flex items-center justify-between gap-4"><div><h2 className="text-sm font-semibold">抽出結果の確認</h2><p className="text-xs text-muted-foreground mt-1">OCR結果は必ず検査票と照合し、誤り・未検査項目を修正または削除してください。</p></div>{isReading && <span className="text-xs text-primary flex items-center gap-1"><Loader2 className="w-3.5 h-3.5 animate-spin" />{progressLabel}</span>}</div><div className="overflow-x-auto border border-border rounded-lg"><table className="w-full min-w-[560px] text-sm"><thead className="bg-muted/50"><tr><th className="text-left p-3 font-medium text-muted-foreground">検査項目</th><th className="text-left p-3 font-medium text-muted-foreground">数値</th><th className="text-left p-3 font-medium text-muted-foreground">単位</th><th className="w-12" /></tr></thead><tbody>{items.map((item, index) => <tr key={index} className="border-t border-border"><td className="p-2"><Input aria-label="検査項目" value={item.item} onChange={(event) => updateItem(index, "item", event.target.value)} placeholder="例：WBC" className="h-8" /></td><td className="p-2"><Input aria-label="検査値" type="number" step="any" value={item.value ?? ""} onChange={(event) => updateItem(index, "value", event.target.value)} placeholder="未検査は空欄" className="h-8" /></td><td className="p-2"><Input aria-label="単位" value={item.unit} onChange={(event) => updateItem(index, "unit", event.target.value)} placeholder="例：mg/dL" className="h-8" /></td><td className="p-2"><button aria-label="項目を削除" type="button" onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="p-2 text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></button></td></tr>)}</tbody></table></div><div className="flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" onClick={() => setItems((current) => [...current, { ...EMPTY_ITEM }])} className="gap-1.5"><Plus className="w-3.5 h-3.5" />項目を追加</Button><Button type="button" variant="outline" size="sm" onClick={() => setItems((current) => current.length ? current : [{ ...EMPTY_ITEM }])} className="gap-1.5"><FileText className="w-3.5 h-3.5" />手入力する</Button></div></CardContent></Card>}
+        {(isReading || items.length > 0) && <Card className="border-border shadow-none"><CardContent className="p-6 space-y-4"><div className="flex items-center justify-between gap-4"><div><h2 className="text-sm font-semibold">抽出結果の確認</h2><p className="text-xs text-muted-foreground mt-1">数値が抽出されていれば、入力せずそのまま下のボタンでレポートを作成できます。安全のため、検査票との照合も行ってください。</p></div>{isReading && <span className="text-xs text-primary flex items-center gap-1"><Loader2 className="w-3.5 h-3.5 animate-spin" />{progressLabel}</span>}</div><div className="overflow-x-auto border border-border rounded-lg"><table className="w-full min-w-[560px] text-sm"><thead className="bg-muted/50"><tr><th className="text-left p-3 font-medium text-muted-foreground">検査項目</th><th className="text-left p-3 font-medium text-muted-foreground">数値</th><th className="text-left p-3 font-medium text-muted-foreground">単位</th><th className="w-12" /></tr></thead><tbody>{items.map((item, index) => <tr key={index} className="border-t border-border"><td className="p-2"><Input aria-label="検査項目" value={item.item} onChange={(event) => updateItem(index, "item", event.target.value)} placeholder="例：WBC" className="h-8" /></td><td className="p-2"><Input aria-label="検査値" type="number" step="any" value={item.value ?? ""} onChange={(event) => updateItem(index, "value", event.target.value)} placeholder="未検査は空欄" className="h-8" /></td><td className="p-2"><Input aria-label="単位" value={item.unit} onChange={(event) => updateItem(index, "unit", event.target.value)} placeholder="例：mg/dL" className="h-8" /></td><td className="p-2"><button aria-label="項目を削除" type="button" onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="p-2 text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></button></td></tr>)}</tbody></table></div><div className="flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" onClick={() => setItems((current) => [...current, { ...EMPTY_ITEM }])} className="gap-1.5"><Plus className="w-3.5 h-3.5" />項目を追加</Button><Button type="button" variant="outline" size="sm" onClick={() => setItems((current) => current.length ? current : [{ ...EMPTY_ITEM }])} className="gap-1.5"><FileText className="w-3.5 h-3.5" />手入力する</Button></div></CardContent></Card>}
 
         <Card className="border-border shadow-none"><CardContent className="p-6 space-y-3"><div className="flex items-center justify-between"><div><h2 className="text-sm font-semibold">OCRテキスト（任意）</h2><p className="text-xs text-muted-foreground mt-1">読み取り文字を直接修正して、候補を再抽出できます。</p></div><Button type="button" variant="outline" size="sm" onClick={applyText} disabled={!rawText.trim()} className="gap-1.5"><ClipboardPaste className="w-3.5 h-3.5" />候補へ反映</Button></div><textarea value={rawText} onChange={(event) => setRawText(event.target.value)} placeholder="OCR結果がここに表示されます。画像を使用せず、検査項目と数値を貼り付けて候補化することもできます。" className="w-full min-h-28 rounded-lg border border-input bg-background px-3 py-2 text-xs leading-relaxed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></CardContent></Card>
 
         <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-50 border border-amber-200"><AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" /><p className="text-xs text-amber-700 leading-relaxed">本アプリは参考情報を提供するものであり、医学的診断を示すものではありません。異常値は主治医の指示と看護師の専門的判断のもとで確認してください。</p></div>
-        <Button className="w-full h-11 gap-2" disabled={isReading} onClick={saveAnalysis}><FlaskConical className="w-4 h-4" />確認済みの数値でレポートを作成・端末内に保存</Button>
+        <Button className="w-full h-11 gap-2" disabled={isReading} onClick={saveAnalysis}><FlaskConical className="w-4 h-4" />{wasOcr ? "OCR結果でレポートを作成・端末内に保存" : "確認済みの数値でレポートを作成・端末内に保存"}</Button>
       </div>
     </AppLayout>
   );
