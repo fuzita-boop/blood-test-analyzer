@@ -9,6 +9,16 @@ type OcrCandidate = {
   defaultUnit: string;
 };
 
+/** Tesseractの単語位置情報のうち、表解析に必要な最小構成。 */
+export type OcrWord = {
+  text: string;
+  bbox: { x0: number; y0: number; x1: number; y1: number };
+};
+
+type OcrRow = { words: OcrWord[]; centerY: number; height: number };
+
+type CandidateMatch = { candidate: OcrCandidate; alias: string };
+
 const OCR_CANDIDATES: OcrCandidate[] = [
   { canonical: "WBC", aliases: ["WBC", "白血球", "白血球数"], defaultUnit: "/μL" },
   { canonical: "RBC", aliases: ["RBC", "赤血球", "赤血球数"], defaultUnit: "×10⁴/μL" },
@@ -72,6 +82,14 @@ function matchesAlias(line: string, alias: string) {
   return line.toLowerCase().includes(normalizedAlias.toLowerCase());
 }
 
+function findCandidate(text: string): CandidateMatch | null {
+  for (const candidate of OCR_CANDIDATES) {
+    const alias = candidate.aliases.find((value) => matchesAlias(text, value));
+    if (alias) return { candidate, alias };
+  }
+  return null;
+}
+
 function detectUnit(text: string, fallback: string) {
   const unitMatch = text.match(/((?:×|x)\s*10(?:[²³⁴⁶]|\^?[2346])\s*\/?\s*μ?[lL]|U\/?L|mg\/?dL|mg\/?L|g\/?dL|mEq\/?L|mmol\/?L|mL\/?min\/?1\.73m2|\/?μ[lL]|%|pg|fL)/i);
   const detected = unitMatch?.[0]?.replace(/\s+/g, "");
@@ -88,6 +106,13 @@ function isReferenceRange(text: string) {
   return /\d[\d,.]*\s*(?:~|〜|\-|–|to)\s*\d[\d,.]*/i.test(text);
 }
 
+function numberFromText(text: string) {
+  const normalized = normalizeLine(text);
+  if (isReferenceRange(normalized)) return null;
+  const matched = normalized.match(/^\s*([-+]?\d[\d,.]*)\s*(?:$|[^\d])/);
+  return matched ? normalizeNumber(matched[1]) : null;
+}
+
 function getValueNearLabel(lines: string[], lineIndex: number, alias: string) {
   const labelLine = lines[lineIndex] ?? "";
   const afterLabel = labelLine.replace(new RegExp(`.*?${escapeRegExp(alias)}`, "i"), "");
@@ -96,14 +121,13 @@ function getValueNearLabel(lines: string[], lineIndex: number, alias: string) {
     return { value: normalizeNumber(sameLineValue), context: lines.slice(lineIndex, lineIndex + 3).join(" ") };
   }
 
-  // 検査票の列レイアウトでは「項目名」「数値」「単位」が別々の行としてOCRされる場合がある。
-  // 直後2行だけを候補にし、基準値の範囲表記は実測値として扱わない。
+  // 行単位で読まれたOCRへのフォールバック。基準値の範囲表記は実測値として扱わない。
   for (let offset = 1; offset <= 2; offset += 1) {
     const nextLine = lines[lineIndex + offset];
     if (!nextLine || isReferenceRange(nextLine) || /^(?:基準値|参考値|単位|項目|結果)$/i.test(nextLine)) continue;
-    const numericValue = nextLine.match(/^\s*([-+]?\d[\d,.]*)\s*(?:$|[^\d])/ )?.[1];
-    if (numericValue) {
-      return { value: normalizeNumber(numericValue), context: lines.slice(lineIndex, lineIndex + 4).join(" ") };
+    const value = numberFromText(nextLine);
+    if (value !== null) {
+      return { value, context: lines.slice(lineIndex, lineIndex + 4).join(" ") };
     }
   }
 
@@ -112,8 +136,7 @@ function getValueNearLabel(lines: string[], lineIndex: number, alias: string) {
 
 /**
  * OCR本文から、検査項目の直後にある実測値を候補として抽出する。
- * 同一行だけでなく、表の列が分割されたOCR結果（項目名→数値→単位）にも対応する。
- * 数値のない項目・基準範囲だけの行は未検査（null）として残し、解析対象にはしない。
+ * 同一行だけでなく、項目名→数値→単位が別行になった結果にも対応する。
  */
 export function parseBloodTestText(rawText: string): ExtractedItem[] {
   const lines = rawText
@@ -139,6 +162,87 @@ export function parseBloodTestText(rawText: string): ExtractedItem[] {
   return extracted;
 }
 
+function centerY(word: OcrWord) {
+  return (word.bbox.y0 + word.bbox.y1) / 2;
+}
+
+function wordHeight(word: OcrWord) {
+  return Math.max(1, word.bbox.y1 - word.bbox.y0);
+}
+
+/** 単語座標を同じ見た目の行ごとにまとめる。 */
+function groupRows(words: OcrWord[]): OcrRow[] {
+  const sorted = words
+    .filter((word) => word.text.trim())
+    .map((word) => ({ ...word, text: normalizeLine(word.text) }))
+    .filter((word) => word.text)
+    .sort((a, b) => centerY(a) - centerY(b) || a.bbox.x0 - b.bbox.x0);
+
+  const rows: OcrRow[] = [];
+  for (const word of sorted) {
+    const row = rows.find((candidate) => Math.abs(candidate.centerY - centerY(word)) <= Math.max(8, Math.max(candidate.height, wordHeight(word)) * 0.75));
+    if (row) {
+      row.words.push(word);
+      row.words.sort((a, b) => a.bbox.x0 - b.bbox.x0);
+      row.centerY = row.words.reduce((sum, item) => sum + centerY(item), 0) / row.words.length;
+      row.height = Math.max(row.height, wordHeight(word));
+    } else {
+      rows.push({ words: [word], centerY: centerY(word), height: wordHeight(word) });
+    }
+  }
+  return rows.sort((a, b) => a.centerY - b.centerY);
+}
+
+function extractItemFromRow(row: OcrRow, labelIndex: number, candidate: OcrCandidate): ExtractedItem | null {
+  const labelWord = row.words[labelIndex];
+  const afterLabel = row.words.slice(labelIndex + 1);
+  const valueWordIndex = afterLabel.findIndex((word) => numberFromText(word.text) !== null);
+  if (valueWordIndex < 0) return null;
+
+  const valueWord = afterLabel[valueWordIndex];
+  const value = numberFromText(valueWord.text);
+  if (value === null) return null;
+
+  // 項目名より右側にある最初の数値を実測値として扱う。基準範囲はその後ろの列にある前提で無視する。
+  if (valueWord.bbox.x0 < labelWord.bbox.x0) return null;
+  const context = afterLabel.slice(valueWordIndex, valueWordIndex + 3).map((word) => word.text).join(" ");
+  return { item: candidate.canonical, value, unit: detectUnit(context, candidate.defaultUnit) };
+}
+
+/**
+ * Tesseractの単語位置情報を利用し、表の同一行にある項目名・実測値・単位を対応付ける。
+ * 通常の改行OCRでは列の順序が崩れる検査票でも、横並びの関係を保って抽出できる。
+ */
+export function parseBloodTestWords(words: OcrWord[]): ExtractedItem[] {
+  const rows = groupRows(words);
+  const extracted = new Map<string, ExtractedItem>();
+
+  for (const row of rows) {
+    for (let index = 0; index < row.words.length; index += 1) {
+      const word = row.words[index];
+      const match = findCandidate(word.text);
+      if (!match || extracted.has(match.candidate.canonical)) continue;
+      const item = extractItemFromRow(row, index, match.candidate);
+      if (item) extracted.set(match.candidate.canonical, item);
+    }
+  }
+
+  return Array.from(extracted.values());
+}
+
+/** 座標解析を優先し、読み取れなかった項目だけ従来のOCR本文解析で補う。 */
+export function extractBloodTestItems(rawText: string, words: OcrWord[]): ExtractedItem[] {
+  const spatialItems = parseBloodTestWords(words);
+  const textItems = parseBloodTestText(rawText);
+  const merged = new Map<string, ExtractedItem>();
+
+  for (const item of [...spatialItems, ...textItems]) {
+    const existing = merged.get(item.item);
+    if (!existing || (existing.value === null && item.value !== null)) merged.set(item.item, item);
+  }
+  return Array.from(merged.values());
+}
+
 /**
  * すべてのOCR資産を同一オリジンの静的ファイルから読み込む。
  * デプロイ後はService Workerがこれらをキャッシュするため、初回オンライン起動後にオフライン利用できる。
@@ -154,9 +258,15 @@ export async function extractFromImage(file: File, onProgress?: (progress: OcrPr
     logger: (message) => onProgress?.({ status: message.status, progress: message.progress }),
   });
   try {
-    const result = await worker.recognize(file);
+    // blocksを明示指定し、表の同一行にある項目名・実測値・単位の座標を取得する。
+    const result = await worker.recognize(file, {}, { text: true, blocks: true });
     const rawText = result.data.text;
-    return { rawText, items: parseBloodTestText(rawText) };
+    const words: OcrWord[] = (result.data.blocks ?? [])
+      .flatMap((block) => block.paragraphs)
+      .flatMap((paragraph) => paragraph.lines)
+      .flatMap((line) => line.words)
+      .map((word) => ({ text: word.text, bbox: word.bbox }));
+    return { rawText, items: extractBloodTestItems(rawText, words) };
   } finally {
     await worker.terminate();
   }
